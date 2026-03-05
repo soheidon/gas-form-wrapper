@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>院内アンケート</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
+    .container { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card-header { border-top: 4px solid #4285f4; border-radius: 8px 8px 0 0; }
+    h1 { font-size: 24px; font-weight: 500; margin-bottom: 8px; }
+    .required-mark { color: #d93025; margin-left: 4px; }
+    .question-title { font-size: 16px; font-weight: 500; margin-bottom: 12px; }
+    .help-text { color: #666; font-size: 13px; margin-bottom: 8px; }
+
+    input[type="text"], textarea, select {
+      width: 100%; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 4px;
+      font-size: 14px; transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, textarea:focus, select:focus { outline: none; border-color: #4285f4; border-width: 2px; }
+    textarea { min-height: 80px; resize: vertical; }
+
+    .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-group label, .checkbox-group label {
+      display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; cursor: pointer;
+    }
+    .radio-group label:hover, .checkbox-group label:hover { background: #f8f9fa; }
+
+    .btn { padding: 10px 24px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+    .btn-primary { background: #4285f4; color: #fff; }
+    .btn-primary:hover { background: #3367d6; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg-success { background: #e6f4ea; color: #137333; padding: 16px; border-radius: 4px; }
+    .msg-error { background: #fce8e6; color: #c5221f; padding: 16px; border-radius: 4px; }
+    .msg-received { background: #fef7e0; color: #b06000; padding: 16px; border-radius: 4px; }
+    .msg-info { background: #e8f0fe; color: #1967d2; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 13px; }
+    .loading { text-align: center; padding: 40px; color: #666; }
+
+    .footer { text-align: right; padding-top: 8px; }
+    .submission-id { font-size: 12px; color: #999; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="loading" class="card loading">読み込み中...</div>
+    <div id="form-area" style="display:none;"></div>
+    <div id="result-area" style="display:none;"></div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 状態管理
+    // =========================================================================
+    var state = {
+      formDef: null,
+      submissionId: null,
+      answers: {},
+      submitting: false,
+      draftRestored: false
+    };
+
+    // =========================================================================
+    // 下書き保存（localStorage）
+    // バージョン不一致やリロード時に入力内容を復元するための仕組み。
+    // submissionId ではなく固定キー "survey_draft" で保存する
+    // （リロード後に新しい submissionId が振られるため）。
+    // TTL: 2時間（古い下書きを自動的に無効化）。
+    // =========================================================================
+    var DRAFT_KEY = 'survey_draft';
+    var DRAFT_TTL_MS = 2 * 60 * 60 * 1000; // 2時間
+
+    function Draft_save(answers) {
+      try {
+        var data = {
+          answers: answers,
+          savedAt: Date.now()
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+      } catch (e) {
+        // localStorage 使用不可の場合は無視
+      }
+    }
+
+    function Draft_load() {
+      try {
+        var raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return null;
+        var data = JSON.parse(raw);
+        // TTL チェック
+        if (Date.now() - data.savedAt > DRAFT_TTL_MS) {
+          localStorage.removeItem(DRAFT_KEY);
+          return null;
+        }
+        return data.answers;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function Draft_clear() {
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // =========================================================================
+    // UUID 生成
+    // =========================================================================
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    // =========================================================================
+    // 初期化
+    // =========================================================================
+    function init() {
+      state.submissionId = generateUUID();
+      google.script.run
+        .withSuccessHandler(onFormDefLoaded)
+        .withFailureHandler(onLoadError)
+        .getFormDefinition();
+    }
+
+    function onFormDefLoaded(formDef) {
+      state.formDef = formDef;
+
+      // 下書き復元を試みる
+      var draft = Draft_load();
+      if (draft && Object.keys(draft).length > 0) {
+        state.answers = draft;
+        state.draftRestored = true;
+      }
+
+      renderForm(formDef);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('form-area').style.display = 'block';
+    }
+
+    function onLoadError(error) {
+      document.getElementById('loading').innerHTML =
+        '<div class="msg-error">読み込みに失敗しました。画面を再読み込みしてください。<br><small>' + error.message + '</small></div>';
+    }
+
+    // =========================================================================
+    // フォーム描画
+    // =========================================================================
+    function renderForm(formDef) {
+      var area = document.getElementById('form-area');
+      var html = '';
+
+      html += '<div class="card card-header"><h1>院内アンケート</h1></div>';
+
+      // 下書き復元通知
+      if (state.draftRestored) {
+        html += '<div class="msg-info">前回の入力内容を復元しました。内容を確認してから送信してください。</div>';
+      }
+
+      for (var i = 0; i < formDef.items.length; i++) {
+        html += renderQuestion(formDef.items[i]);
+      }
+
+      html += '<div class="card footer">';
+      html += '<button id="submit-btn" class="btn btn-primary" onclick="handleSubmit()">送信</button>';
+      html += '</div>';
+
+      area.innerHTML = html;
+
+      // 下書きがある場合、フォームに値を復元
+      if (state.draftRestored) {
+        restoreFormValues(formDef);
+      }
+    }
+
+    function renderQuestion(item) {
+      var html = '<div class="card" data-item-id="' + item.id + '">';
+      html += '<div class="question-title">' + escapeHtml(item.title);
+      if (item.required) html += '<span class="required-mark">*</span>';
+      html += '</div>';
+      if (item.helpText) html += '<div class="help-text">' + escapeHtml(item.helpText) + '</div>';
+
+      switch (item.type) {
+        case 'TEXT':
+          html += '<input type="text" id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)" oninput="updateAnswer(' + item.id + ', this.value)">';
+          break;
+        case 'PARAGRAPH_TEXT':
+          html += '<textarea id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)" oninput="updateAnswer(' + item.id + ', this.value)"></textarea>';
+          break;
+        case 'MULTIPLE_CHOICE':
+          html += '<div class="radio-group">';
+          for (var i = 0; i < item.choices.length; i++) {
+            html += '<label><input type="radio" name="q_' + item.id + '" value="' + escapeHtml(item.choices[i]) + '" onchange="updateAnswer(' + item.id + ', this.value)"> ' + escapeHtml(item.choices[i]) + '</label>';
+          }
+          html += '</div>';
+          break;
+        case 'CHECKBOX':
+          html += '<div class="checkbox-group">';
+          for (var i = 0; i < item.choices.length; i++) {
+            html += '<label><input type="checkbox" name="q_' + item.id + '" value="' + escapeHtml(item.choices[i]) + '" onchange="updateCheckbox(' + item.id + ')"> ' + escapeHtml(item.choices[i]) + '</label>';
+          }
+          html += '</div>';
+          break;
+        case 'LIST':
+          html += '<select id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)">';
+          html += '<option value="">選択してください</option>';
+          for (var i = 0; i < item.choices.length; i++) {
+            html += '<option value="' + escapeHtml(item.choices[i]) + '">' + escapeHtml(item.choices[i]) + '</option>';
+          }
+          html += '</select>';
+          break;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    /**
+     * 下書きから復元した値をフォームのDOM要素に反映する。
+     */
+    function restoreFormValues(formDef) {
+      for (var i = 0; i < formDef.items.length; i++) {
+        var item = formDef.items[i];
+        var answer = state.answers[item.id];
+        if (answer === undefined || answer === null) continue;
+
+        switch (item.type) {
+          case 'TEXT':
+          case 'PARAGRAPH_TEXT':
+            var el = document.getElementById('input_' + item.id);
+            if (el) el.value = answer;
+            break;
+          case 'LIST':
+            var sel = document.getElementById('input_' + item.id);
+            if (sel) sel.value = answer;
+            break;
+          case 'MULTIPLE_CHOICE':
+            var radios = document.querySelectorAll('input[name="q_' + item.id + '"]');
+            for (var j = 0; j < radios.length; j++) {
+              if (radios[j].value === answer) radios[j].checked = true;
+            }
+            break;
+          case 'CHECKBOX':
+            if (Array.isArray(answer)) {
+              var cbs = document.querySelectorAll('input[name="q_' + item.id + '"]');
+              for (var j = 0; j < cbs.length; j++) {
+                if (answer.indexOf(cbs[j].value) !== -1) cbs[j].checked = true;
+              }
+            }
+            break;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 回答値の更新（入力のたびに下書き保存）
+    // =========================================================================
+    function updateAnswer(itemId, value) {
+      state.answers[itemId] = value;
+      Draft_save(state.answers);
+    }
+
+    function updateCheckbox(itemId) {
+      var checkboxes = document.querySelectorAll('input[name="q_' + itemId + '"]:checked');
+      var values = [];
+      for (var i = 0; i < checkboxes.length; i++) {
+        values.push(checkboxes[i].value);
+      }
+      state.answers[itemId] = values;
+      Draft_save(state.answers);
+    }
+
+    // =========================================================================
+    // 送信処理
+    // =========================================================================
+    function handleSubmit() {
+      if (state.submitting) return;
+      state.submitting = true;
+
+      var btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>送信中...';
+
+      var payload = {
+        answers: state.answers,
+        formRevisionHash: state.formDef.formRevisionHash,
+        webAppVersion: state.formDef.webAppVersion,
+        submissionId: state.submissionId
+      };
+
+      google.script.run
+        .withSuccessHandler(onSubmitSuccess)
+        .withFailureHandler(onSubmitError)
+        .submitAnswer(payload);
+    }
+
+    function onSubmitSuccess(result) {
+      state.submitting = false;
+      var area = document.getElementById('result-area');
+      document.getElementById('form-area').style.display = 'none';
+      area.style.display = 'block';
+
+      if (result.success) {
+        // 送信成功 → 下書きを削除
+        Draft_clear();
+        area.innerHTML =
+          '<div class="card"><div class="msg-success">&#10003; ' + escapeHtml(result.message) + '</div>'
+          + '<div class="submission-id">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
+      } else if (result.received) {
+        // 受付済みだがSubmit失敗 → 下書きは削除（Op Logに記録済み）
+        Draft_clear();
+        area.innerHTML =
+          '<div class="card"><div class="msg-received">' + escapeHtml(result.message) + '</div>'
+          + '<div class="submission-id">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
+      } else {
+        // バリデーションエラー等 → 再入力（下書きは保持）
+        document.getElementById('form-area').style.display = 'block';
+        area.style.display = 'none';
+        showRetryMessage(result.message);
+      }
+    }
+
+    function onSubmitError(error) {
+      // ネットワークエラー・ロックタイムアウト等 → 再試行（下書きは保持）
+      state.submitting = false;
+      var btn = document.getElementById('submit-btn');
+      btn.disabled = false;
+      btn.innerHTML = '送信';
+      showRetryMessage('通信エラーが発生しました。再試行してください。');
+    }
+
+    function showRetryMessage(message) {
+      var existing = document.getElementById('retry-msg');
+      if (existing) existing.remove();
+      var footer = document.querySelector('.footer');
+      var div = document.createElement('div');
+      div.id = 'retry-msg';
+      div.className = 'msg-error';
+      div.style.marginBottom = '12px';
+      div.textContent = message;
+      footer.insertBefore(div, footer.firstChild);
+    }
+
+    // =========================================================================
+    // ユーティリティ
+    // =========================================================================
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // =========================================================================
+    // 起動
+    // =========================================================================
+    init();
+  </script>
+</body>
+</html>

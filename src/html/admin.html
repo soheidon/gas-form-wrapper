@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>院内アンケート — 管理画面</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h1 { font-size: 22px; font-weight: 500; margin-bottom: 16px; }
+    h2 { font-size: 16px; font-weight: 500; margin-bottom: 12px; color: #555; }
+
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; }
+    .stat-box { flex: 1; min-width: 120px; text-align: center; padding: 16px; background: #f8f9fa; border-radius: 8px; }
+    .stat-number { font-size: 28px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+    .stat-ok .stat-number { color: #137333; }
+    .stat-fail .stat-number { color: #c5221f; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8f9fa; text-align: left; padding: 10px 8px; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+    td { padding: 10px 8px; border-bottom: 1px solid #eee; }
+    tr:hover td { background: #f8f9fa; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-stale { background: #fef7e0; color: #b06000; }
+    .badge-transient { background: #fce8e6; color: #c5221f; }
+    .badge-permanent { background: #f3e8fd; color: #7627bb; }
+    .badge-abandoned { background: #e8e8e8; color: #666; }
+
+    .btn { padding: 6px 14px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .btn-retry { background: #4285f4; color: #fff; }
+    .btn-retry:hover { background: #3367d6; }
+    .btn-retry:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-refresh { background: #fff; border: 1px solid #dadce0; color: #333; padding: 8px 16px; font-size: 13px; }
+    .btn-refresh:hover { background: #f8f9fa; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .loading { color: #666; padding: 16px; text-align: center; }
+    .empty { color: #999; padding: 24px; text-align: center; }
+    .msg-error { background: #fce8e6; color: #c5221f; padding: 16px; border-radius: 4px; }
+    .msg-success { background: #e6f4ea; color: #137333; padding: 12px; border-radius: 4px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="toolbar">
+        <h1>管理画面</h1>
+        <button class="btn btn-refresh" onclick="loadAll()">更新</button>
+      </div>
+      <div id="stats-area" class="loading">読み込み中...</div>
+    </div>
+
+    <!-- 操作結果の通知 -->
+    <div id="notification-area"></div>
+
+    <div class="card">
+      <h2>要対応レコード</h2>
+      <div id="table-area" class="loading">読み込み中...</div>
+    </div>
+  </div>
+
+  <script>
+    // --- 初期化 ---
+    function loadAll() {
+      loadStats();
+      loadFailed();
+    }
+
+    // --- 認可エラーの共通ハンドリング ---
+    function handleError(error, fallbackMessage) {
+      var msg = error.message || '';
+      if (msg.indexOf('ADMIN_AUTH_FAILED') !== -1) {
+        document.querySelector('.container').innerHTML =
+          '<div class="card"><div class="msg-error"><strong>アクセス権限がありません</strong><br>管理者としてログインしてください。</div></div>';
+        return true; // 認可エラーとして処理済み
+      }
+      return false; // 認可エラーではない
+    }
+
+    // --- 成功率サマリ ---
+    function loadStats() {
+      document.getElementById('stats-area').innerHTML = '<div class="loading">読み込み中...</div>';
+      google.script.run
+        .withSuccessHandler(renderStats)
+        .withFailureHandler(function(e) {
+          if (!handleError(e)) {
+            document.getElementById('stats-area').innerHTML = '<div class="loading">読み込み失敗</div>';
+          }
+        })
+        .getSuccessRate24h();
+    }
+
+    function renderStats(data) {
+      var html = '<div class="stats">';
+      html += '<div class="stat-box"><div class="stat-number">' + data.total + '</div><div class="stat-label">受付数（24h）</div></div>';
+      html += '<div class="stat-box stat-ok"><div class="stat-number">' + data.rate + '%</div><div class="stat-label">成功率</div></div>';
+      html += '<div class="stat-box stat-ok"><div class="stat-number">' + data.submitted + '</div><div class="stat-label">送信成功</div></div>';
+      html += '<div class="stat-box ' + (data.failed > 0 ? 'stat-fail' : '') + '"><div class="stat-number">' + data.failed + '</div><div class="stat-label">失敗</div></div>';
+      html += '</div>';
+      document.getElementById('stats-area').innerHTML = html;
+    }
+
+    // --- FAILED一覧 ---
+    function loadFailed() {
+      document.getElementById('table-area').innerHTML = '<div class="loading">読み込み中...</div>';
+      google.script.run
+        .withSuccessHandler(renderFailed)
+        .withFailureHandler(function(e) {
+          if (!handleError(e)) {
+            document.getElementById('table-area').innerHTML = '<div class="loading">読み込み失敗</div>';
+          }
+        })
+        .getFailedRecords();
+    }
+
+    function renderFailed(records) {
+      if (records.length === 0) {
+        document.getElementById('table-area').innerHTML = '<div class="empty">要対応レコードはありません</div>';
+        return;
+      }
+
+      var html = '<table><thead><tr>';
+      html += '<th>submissionId</th><th>ステータス</th><th>受付時刻</th><th>エラー種別</th><th>再試行</th><th>操作</th>';
+      html += '</tr></thead><tbody>';
+
+      for (var i = 0; i < records.length; i++) {
+        var r = records[i];
+        var badgeClass = getBadgeClass(r.status);
+
+        html += '<tr id="row_' + r.rowNumber + '">';
+        html += '<td style="font-family:monospace;font-size:11px;">' + escapeHtml(r.submissionId) + '</td>';
+        html += '<td><span class="badge ' + badgeClass + '">' + escapeHtml(r.status) + '</span></td>';
+        html += '<td>' + escapeHtml(r.receivedAt) + '</td>';
+        html += '<td>' + escapeHtml(r.errorType || '-') + '</td>';
+        html += '<td>' + r.retryCount + '</td>';
+        html += '<td><button class="btn btn-retry" onclick="doManualRetry(' + r.rowNumber + ', this)">再送</button></td>';
+        html += '</tr>';
+      }
+
+      html += '</tbody></table>';
+      document.getElementById('table-area').innerHTML = html;
+    }
+
+    function getBadgeClass(status) {
+      switch (status) {
+        case 'STALE_RECEIVED': return 'badge-stale';
+        case 'FAILED_TRANSIENT': return 'badge-transient';
+        case 'FAILED_PERMANENT': return 'badge-permanent';
+        case 'ABANDONED': return 'badge-abandoned';
+        default: return '';
+      }
+    }
+
+    // --- 手動再送 ---
+    function doManualRetry(rowNumber, btn) {
+      btn.disabled = true;
+      btn.textContent = '処理中...';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          showNotification(result.message, result.success);
+          loadAll(); // 一覧を再読み込み
+        })
+        .withFailureHandler(function(e) {
+          if (!handleError(e)) {
+            showNotification('再送処理に失敗しました: ' + e.message, false);
+          }
+          btn.disabled = false;
+          btn.textContent = '再送';
+        })
+        .manualRetry(rowNumber);
+    }
+
+    // --- 通知表示 ---
+    function showNotification(message, isSuccess) {
+      var area = document.getElementById('notification-area');
+      var cls = isSuccess ? 'msg-success' : 'msg-error';
+      area.innerHTML = '<div class="' + cls + '">' + escapeHtml(message) + '</div>';
+      // 5秒後に消す
+      setTimeout(function() { area.innerHTML = ''; }, 5000);
+    }
+
+    // --- ユーティリティ ---
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // --- 起動 ---
+    loadAll();
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# clasp push で GAS にアップロードしないファイル
+**/.git/**
+docs/**
+node_modules/**
+.cursor/**
+README.md
+.gitignore
+.clasp.json

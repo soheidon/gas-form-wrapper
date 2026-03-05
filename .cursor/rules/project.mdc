@@ -1,0 +1,139 @@
+---
+description: 院内アンケートシステムのプロジェクト全体ルール
+globs:
+alwaysApply: true
+---
+
+# 院内アンケートシステム — Cursor開発ガイド
+
+## プロジェクト概要
+
+Google Workspace組織内で運用する院内アンケートシステム。
+Googleフォームの設問定義を読み取り、カスタムUIで回答を受け付け、GAS経由でフォームに送信する。
+
+詳細仕様: `docs/spec.md` を必ず参照すること。
+
+## 技術スタック
+
+- **ランタイム**: Google Apps Script (V8)
+- **言語**: JavaScript (ES2020相当、ただしモジュールシステムなし)
+- **開発ツール**: clasp (ローカル開発 → GASへpush)
+- **UI**: HtmlService (サーバサイドテンプレート)
+- **データストア**: Google Spreadsheet (Op Log), Google Forms (回答)
+
+## GAS固有の制約（最重要）
+
+### モジュールシステムがない
+- `import` / `export` / `require` は使えない
+- すべての .js ファイルはGAS上でグローバルスコープに結合される
+- ファイル間の関数呼び出しはグローバル関数として直接呼ぶ
+- 名前衝突を避けるため、各ファイルの関数には接頭辞をつける規約:
+  - `formService.js` → `FormService_xxx()`
+  - `submitService.js` → `SubmitService_xxx()`
+  - `opLog.js` → `OpLog_xxx()`
+  - `validation.js` → `Validation_xxx()`
+  - `retry.js` → `Retry_xxx()`
+  - `config.js` → `Config_xxx()`
+- `main.js` のエントリポイント (`doGet`, `doPost`) のみ接頭辞なし
+
+### 使えないもの
+- `import` / `export` / `require`
+- `fetch()` → 代わりに `UrlFetchApp.fetch()`
+- `setTimeout` / `setInterval` → 代わりに時間主導トリガー
+- `console.log` → 代わりに `Logger.log()` または `console.log()`（V8では使用可）
+- npm パッケージ（一切使えない）
+- ブラウザのDOM API（サーバ側コードでは使えない）
+
+### 実行時間・クォータ
+- 1回の実行: 最大6分
+- 日次トリガー実行: 最大90分/日
+- 同時実行: 30件/ユーザー
+- スプレッドシート: 1セルあたり約50,000文字
+
+### LockService の使い方（厳守）
+スプレッドシート書き込み時のみロックを取得し、FormApp.submit() 中は絶対にロックを保持しない。
+
+```
+// 正しいパターン
+Lock取得 → Op Log書き込み → Lock解放 → submit() → Lock取得 → 結果書き込み → Lock解放
+
+// アンチパターン（禁止）
+Lock取得 → Op Log書き込み → submit() → 結果書き込み → Lock解放
+```
+
+## ファイル構成
+
+```
+src/
+  main.js          — doGet / doPost エントリポイント
+  config.js        — スクリプトプロパティ読み出し
+  formService.js   — フォーム定義読み出し・revision hash生成
+  submitService.js — FormApp.submit 実行・エラー分類
+  opLog.js         — Op Log読み書き・LockService制御
+  validation.js    — サーバ側バリデーション
+  retry.js         — 再送トリガー・STALE_RECEIVED検知
+  html/
+    index.html     — 回答画面
+    admin.html     — 管理者画面
+```
+
+## コーディング規約
+
+- 関数名: キャメルケース、ファイル接頭辞付き (例: `OpLog_writeReceived`)
+- 定数: UPPER_SNAKE_CASE (例: `STALE_THRESHOLD_MIN`)
+- エラーハンドリング: try-catch で囲み、catch内で必ずエラー分類を行う
+- ログ: `console.log()` を使用（V8ランタイム）
+- コメント: 日本語OK、仕様書の節番号を参照する形で書く（例: // §9.2 LockServiceスコープ）
+
+## HTML (クライアント側) のルール
+
+- `src/html/` 内の .html ファイルはGASの `HtmlService` で配信される
+- クライアント側JSは `<script>` タグ内に書く（外部ファイル不可）
+- サーバ側関数の呼び出しは `google.script.run` を使う
+- CSSフレームワークは使用可（CDNから読み込み）
+- `localStorage` / `sessionStorage` は使用可（GASのHtmlServiceでは動作する）
+
+## スクリプトプロパティ（環境変数相当）
+
+コードにIDをハードコードしない。すべて `Config_get()` 経由で取得する。
+
+| キー | 内容 |
+|------|------|
+| FORM_ID | GoogleフォームのID |
+| OPLOG_SHEET_ID | Op Logスプレッドシートの ID |
+| OPLOG_DRIVE_FOLDER_ID | responseData退避先DriveフォルダのID |
+| ADMIN_EMAILS | 管理者メール（カンマ区切り、認可+通知に使用） |
+| RETRY_MAX | 再送上限（デフォルト: 3） |
+| STALE_THRESHOLD_MIN | RECEIVED孤児判定の閾値分（デフォルト: 15） |
+| WEBAPP_VERSION | デプロイバージョン（ビルド日時等） |
+
+## 管理者認可（厳守）
+
+管理者向けのサーバ関数（getFailedRecords, getSuccessRate24h, manualRetry 等）は、
+**必ず冒頭で `assertAdmin_()` を呼ぶ**こと。
+新しい管理者向け関数を追加する場合も同様。ページ配信時（doGet）のチェックだけでは不十分。
+google.script.run はドメイン内の誰でも呼べるため、サーバ関数側でのガードが必須。
+
+## クライアント-サーバ通信
+
+Phase 1 は `google.script.run` を正とする（doPost は外部連携用の予備）。
+理由: GASの認証が自動で効き、CSRF/CORS対策が不要。
+
+## 下書き保存（localStorage）
+
+index.html では入力のたびに localStorage に下書きを保存する。
+目的: webAppVersion不一致やリロード時に入力内容を復元するため。
+- キー: `survey_draft`（固定。submissionIdは使わない）
+- TTL: 2時間
+- 送信成功時・受付済み時に削除
+- バリデーションエラー・通信エラー時は保持
+
+## 開発コマンド
+
+```bash
+clasp push          # ローカル → GASへ反映
+clasp pull          # GAS → ローカルへ取得（通常は使わない）
+clasp deploy        # 新バージョンをデプロイ
+clasp open          # ブラウザでスクリプトエディタを開く
+clasp open --webapp # WebApp URLを開く
+```
