@@ -1,85 +1,100 @@
-# 院内アンケートシステム
+# gas-form-wrapper（Google フォーム用カスタム回答 UI）
 
-Google Workspace 組織内で運用する院内アンケートシステム。  
-Googleフォームの設問をカスタムUIで表示し、GAS経由で回答を送信する。
+Google Workspace 組織内の Web アプリとして動かし、**既存の Google フォームの設問定義を読み取り、カスタム画面から回答を受け付けてフォームへ送信**します。設問の編集は引き続き Google フォーム側で行えます。
 
-## セットアップ
+## このシステムでできること
 
-### 前提条件
+- フォームと同じ内容を、別デザインの回答画面で表示する
+- 送信の失敗を Op Log に残し、再送・管理者からの手動再送ができる
+- フォーム改訂と Web アプリの版ずれを検知し、再読み込みを促す（入力は下書き保存から復元可能）
 
-- Node.js がインストール済み
-- Google Workspace アカウント（組織内）
+## 利用者向け：回答する手順
 
-### 1. clasp のインストールとログイン
+1. 運用担当から共有された **Web アプリの URL** をブラウザで開く
+2. 表示された設問に回答する
+3. 「送信」を押す
+4. 成功すると完了メッセージと受付 ID（submissionId）が表示される
+
+### 画面に「再読み込みしてください」と出たとき
+
+フォームの設問が更新されたか、Web アプリが新しくデプロイされた可能性があります。**ページを再読み込み**してください。入力内容は一定時間、端末内の下書きから自動で戻ることがあります。
+
+### 送信後に「処理中」と表示されることがある
+
+サーバ側で Google フォームへの送信を続けている状態です。しばらく待っても完了しない場合は、運用担当に Op Log の状態を確認してもらってください。
+
+## 運用担当向け：初回セットアップの流れ
+
+### 前提
+
+- Node.js が入っていること
+- Google Workspace のアカウント（組織内で Web アプリを使う想定）
+
+### 1. clasp の準備
 
 ```bash
 npm install -g @google/clasp
 clasp login
 ```
 
-### 2. Googleリソースの準備
+### 2. Google 側で用意するもの（別々のリソース）
 
-以下の4つを作成する（すべて別ファイル / 別リソース）:
-
-1. **Googleフォーム** — 設問を作成（対応タイプ: 記述・段落・ラジオ・チェックボックス・プルダウン）
-2. **Response Sheet** — フォームのレスポンス先スプレッドシート（フォーム作成時に自動生成）
-3. **Op Log スプレッドシート** — 新規作成し、以下のヘッダー行を設定:
+1. **Google フォーム** — 設問を作成（対応タイプ: 記述・段落・ラジオ・チェックボックス・プルダウン）
+2. **Response Sheet** — フォームの回答先スプレッドシート（フォーム作成時に自動で作られることが多い）
+3. **Op Log 用スプレッドシート** — 新規作成し、1 行目に次の列名を置く
 
 | A | B | C | D | E | F | G | H | I | J | K | L |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | submissionId | status | receivedAt | submittedAt | formRevisionHash | userEmail | userTempKey | responseData | errorType | errorMessage | retryCount | lastRetryAt |
 
-4. **Google Driveフォルダ** — responseData退避用。新規作成し、共有設定を「管理者のみ」に設定
+4. **Google Drive フォルダ** — 長大な回答 JSON をファイル退避するときの保存先。アクセスは管理者に限定する
 
-### 3. GASプロジェクトの作成
+### 3. GAS プロジェクトとこのリポジトリの接続
 
 ```bash
-# 新規作成の場合
-clasp create --type webapp --rootDir src --title "院内アンケートシステム"
-
-# 既存のGASプロジェクトに接続する場合
+clasp create --type webapp --rootDir src --title "gas-form-wrapper"
+# または既存プロジェクトへ
 clasp clone <YOUR_SCRIPT_ID> --rootDir src
 ```
 
-### 4. スクリプトプロパティの設定
+### 4. スクリプトプロパティ（Apps Script のプロジェクト設定）
 
-ブラウザで Apps Script エディタを開き、プロジェクト設定 → スクリプトプロパティに以下を登録:
-
-| キー | 値 |
-|------|-----|
-| `FORM_ID` | GoogleフォームのID |
-| `OPLOG_SHEET_ID` | Op Logスプレッドシートの ID |
-| `OPLOG_DRIVE_FOLDER_ID` | responseData退避先DriveフォルダのID |
+| キー | 内容 |
+|------|------|
+| `FORM_ID` | 対象 Google フォームの ID |
+| `OPLOG_SHEET_ID` | Op Log スプレッドシートの ID |
+| `OPLOG_DRIVE_FOLDER_ID` | 退避先 Drive フォルダの ID |
 | `ADMIN_EMAILS` | 管理者メール（カンマ区切り） |
-| `WEBAPP_VERSION` | `1`（デプロイごとにインクリメント） |
+| `WEBAPP_VERSION` | デプロイのたびに増やす整数など（例: `1`） |
 
 ```bash
-clasp open  # ブラウザでエディタを開く
+clasp open   # エディタでプロジェクト設定を開く
 ```
 
-### 5. デプロイ
+### 5. デプロイと動作確認
 
 ```bash
-clasp push              # コードをGASへ反映
-clasp deploy            # WebAppとしてデプロイ
-clasp open --webapp     # WebApp URLで動作確認
+clasp push
+clasp deploy
+clasp open --webapp
 ```
 
-### 6. デプロイ時の運用ルール
+### デプロイ時の注意
 
-- デプロイ前に利用者へ告知する（「入力中の方は先に送信を完了してください」）
-- デプロイ後、スクリプトプロパティの `WEBAPP_VERSION` をインクリメントする
-- 開いたままの画面は「再読み込みしてください」エラーになるが、入力内容は localStorage に下書き保存されているため、再読み込み後に自動復元される
+- デプロイ前に利用者へ知らせる（入力中の人は先に送信してもらう）
+- デプロイ後、`WEBAPP_VERSION` を更新する
+- 古いタブは版不一致で再読み込みが必要になるが、下書き復元で入力の再入力負担を減らせる
 
-## 開発コマンド
+### 管理者画面
 
-```bash
-clasp push          # ローカル → GAS
-clasp deploy        # 新バージョンデプロイ
-clasp open          # スクリプトエディタを開く
-clasp open --webapp # WebApp URLを開く
-```
+Web アプリの URL に `?page=admin` を付けて開く。`ADMIN_EMAILS` に登録したユーザーのみアクセスできます。
 
-## ドキュメント
+## 仕様の詳細
 
-- `docs/spec.md` — 基本仕様書 v1.1
+- `docs/spec.md` — 機能・データフロー・セキュリティなどの仕様書
+
+## ソースの編集・WSL・clasp の使い方（開発者向け）
+
+ローカルでの編集、Git と GAS の両方への反映、認証トラブルなどは次を参照してください。
+
+- `docs/development.md` — 開発環境と運用手順

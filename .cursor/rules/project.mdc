@@ -1,17 +1,16 @@
 ---
-description: 院内アンケートシステムのプロジェクト全体ルール
+description: gas-form-wrapper（Googleフォーム用カスタム回答UI）のプロジェクト全体ルール
 globs:
 alwaysApply: true
 ---
 
-# 院内アンケートシステム — Cursor開発ガイド
+# gas-form-wrapper — Cursor開発ガイド
 
 ## プロジェクト概要
 
-Google Workspace組織内で運用する院内アンケートシステム。
-Googleフォームの設問定義を読み取り、カスタムUIで回答を受け付け、GAS経由でフォームに送信する。
+Google Workspace 組織内の Web アプリとして、Google フォームの設問定義を読み取り、カスタム UI で回答を受け付け、GAS 経由でフォームに送信する。
 
-詳細仕様: `docs/spec.md` を必ず参照すること。
+詳細仕様: `docs/spec.md` を必ず参照すること。ローカル開発・clasp・Git の手順は `docs/development.md`。
 
 ## 技術スタック
 
@@ -129,6 +128,8 @@ index.html では入力のたびに localStorage に下書きを保存する。
 - バリデーションエラー・通信エラー時は保持
 
 ## 開発コマンド
+
+運用フロー・認証トラブルは `docs/development.md` を参照。
 
 ```bash
 clasp push          # ローカル → GASへ反映

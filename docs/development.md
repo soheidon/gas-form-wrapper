@@ -1,4 +1,6 @@
-# gas-form-wrapper 更新マニュアル
+# 開発環境と運用手順
+
+ローカル（WSL）での編集、GitHub との同期、clasp による GAS への反映をまとめた手順書です。利用者向けのセットアップ概要は `README.md`、機能仕様は `docs/spec.md` を参照してください。
 
 ## 1. このプロジェクトの場所
 
@@ -21,13 +23,7 @@ Windows 側の `\\wsl.localhost\...` を直接開くより、WSL ターミナル
 
 ## 2. clasp の場所
 
-この環境では `clasp` は以下に入っている。
-
-```bash
-/home/sohei/.nvm/versions/node/v22.15.1/bin/clasp
-```
-
-確認コマンドはこれ。
+環境によってパスは異なる。次で確認する。
 
 ```bash
 which clasp
@@ -37,10 +33,10 @@ which clasp
 
 ## 3. clasp の認証情報の場所
 
-`clasp` の認証情報は以下に保存される。
+`clasp` の認証情報は通常ホーム直下に保存される。
 
 ```bash
-/home/sohei/.clasprc.json
+~/.clasprc.json
 ```
 
 確認コマンドはこれ。
@@ -53,7 +49,7 @@ ls -la ~/.clasprc.json
 
 ## 4. このプロジェクトと GAS の結び付け設定
 
-このプロジェクトには、リポジトリ直下に `.clasp.json` を置く。
+リポジトリ直下に `.clasp.json` を置く。
 
 場所:
 
@@ -61,11 +57,11 @@ ls -la ~/.clasprc.json
 /home/sohei/dev/gas-form-wrapper/.clasp.json
 ```
 
-内容:
+内容の例（`scriptId` は接続先の GAS プロジェクトに合わせて置き換える）:
 
 ```json
 {
-  "scriptId": "1ZByG3Er8GTs0PgeSe1kWwZhxsEjrJzs7ZnJq0J_6abv3RJy47iE6mSrV",
+  "scriptId": "<YOUR_SCRIPT_ID>",
   "rootDir": "src"
 }
 ```
@@ -91,7 +87,7 @@ gas-form-wrapper/
   README.md
   docs/
     spec.md
-    update-manual.md
+    development.md
   src/
     appsscript.json
     config.js
@@ -108,16 +104,14 @@ gas-form-wrapper/
 
 役割は次の通り。
 
-* `docs/` : 仕様書など
+* `docs/` : 仕様書・開発手順
 * `src/` : GAS に送る本体コード
 * `.clasp.json` : GAS との接続設定
-* `.git` : GitHub 管理情報
+* `.git` : Git 管理情報
 
 ---
 
 ## 6. 役割分担
-
-このプロジェクトでは、以下のように役割を分ける。
 
 ### GitHub
 
@@ -373,8 +367,8 @@ You are logged in as ...
 
 ### 開発場所は WSL 側が基本
 
-このプロジェクト、`clasp`、認証情報はすべて WSL 側にある。
-そのため、Windows 側ではなく **WSL 側を基準に運用する**。
+このプロジェクト、`clasp`、認証情報は WSL 側にある想定で書いている。
+Windows 側ではなく **WSL 側を基準に運用する**。
 
 ---
 
