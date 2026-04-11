@@ -1,0 +1,29 @@
+{
+  "name": "gas-form-wrapper",
+  "version": "1.0.0",
+  "description": "Google Workspace 組織内で運用する院内アンケートシステム。   Googleフォームの設問をカスタムUIで表示し、GAS経由で回答を送信する。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "check:survey-ui": "node scripts/playwright-check-survey-ui.js",
+    "check:survey-ui:webapp": "node scripts/playwright-check-webapp.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soheidon/gas-form-wrapper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/soheidon/gas-form-wrapper/issues"
+  },
+  "homepage": "https://github.com/soheidon/gas-form-wrapper#readme",
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}

@@ -92,9 +92,18 @@ function doGet(e) {
       .setTitle('院内アンケート — 管理画面');
   }
 
+  var indexPageTitle = 'アンケート';
+  try {
+    var fid = Config_get(CONFIG_KEYS.FORM_ID);
+    var f = FormApp.openById(fid);
+    indexPageTitle = FormService_resolveFormTitle_(f, fid);
+  } catch (e) {
+    // FORM_ID 未設定・open 失敗時は上記フォールバックのまま
+  }
+
   return HtmlService.createTemplateFromFile('html/index')
     .evaluate()
-    .setTitle('院内アンケート');
+    .setTitle(indexPageTitle);
 }
 
 /**
@@ -130,6 +139,73 @@ function doPost(e) {
 // =========================================================================
 
 /**
+ * answers[itemId] が google.script.run / JSON 経由で string キーになる場合にも対応する。
+ *
+ * @param {object} answers
+ * @param {number} itemId
+ * @returns {*}
+ * @private
+ */
+function Answers_lookup_(answers, itemId) {
+  if (answers == null || typeof answers !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(answers, itemId)) return answers[itemId];
+  var sk = String(itemId);
+  if (Object.prototype.hasOwnProperty.call(answers, sk)) return answers[sk];
+  return undefined;
+}
+
+/**
+ * payload.answers を formDef の設問 ID のみに絞り、単一選択の不正値（選択肢に無い文字列）を除外する。
+ *
+ * @param {object} answers
+ * @param {object} formDef
+ * @returns {object}
+ * @private
+ */
+/**
+ * @param {number[]|null|undefined} visitedSections
+ * @private
+ */
+function Submission_itemSectionVisited_(visitedSections, sectionNum) {
+  if (!visitedSections || visitedSections.length === 0) return true;
+  if (sectionNum === undefined || sectionNum === null) return true;
+  for (var vi = 0; vi < visitedSections.length; vi++) {
+    if (Number(visitedSections[vi]) === Number(sectionNum)) return true;
+  }
+  return false;
+}
+
+function sanitizeAnswersForForm_(answers, formDef, visitedSections) {
+  var restrict = visitedSections && Array.isArray(visitedSections) && visitedSections.length > 0;
+  var secMap = formDef.itemSectionByItemId || {};
+  var out = {};
+  for (var i = 0; i < formDef.items.length; i++) {
+    var it = formDef.items[i];
+    if (it.type === 'PAGE_BREAK' || it.type === 'SECTION_HEADER') continue;
+
+    if (restrict) {
+      var sn = secMap[String(it.id)];
+      if (sn === undefined) sn = secMap[it.id];
+      if (!Submission_itemSectionVisited_(visitedSections, sn)) continue;
+    }
+
+    var v = Answers_lookup_(answers, it.id);
+    if (v === undefined || v === null) continue;
+
+    if (it.type === 'MULTIPLE_CHOICE' || it.type === 'LIST') {
+      if (typeof v !== 'string') continue;
+      var trimmed = v.trim();
+      if (!it.choices || it.choices.indexOf(trimmed) === -1) continue;
+      out[it.id] = trimmed;
+      continue;
+    }
+
+    out[it.id] = v;
+  }
+  return out;
+}
+
+/**
  * 回答送信の全フローを処理する。
  * §3.2 のステップ 2〜6 を実行。
  *
@@ -140,6 +216,15 @@ function doPost(e) {
 function processSubmission_(payload) {
   // --- Step 2: サーバ側バリデーション (§3.3) ---
   var formDef = FormService_getFormDefinition();
+  var visited = payload.visitedSections;
+  var answersSanitized = sanitizeAnswersForForm_(payload.answers || {}, formDef, visited);
+  payload = {
+    answers: answersSanitized,
+    visitedSections: visited,
+    formRevisionHash: payload.formRevisionHash,
+    webAppVersion: payload.webAppVersion,
+    submissionId: payload.submissionId
+  };
   var validation = Validation_validate(payload, formDef);
 
   if (!validation.valid) {

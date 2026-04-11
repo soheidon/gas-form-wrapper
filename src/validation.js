@@ -34,11 +34,24 @@ function Validation_validate(payload, formDef) {
     return { valid: false, error: 'INVALID_SUBMISSION_ID' };
   }
 
-  // §3.3-4,5,6: 各設問の回答を検証
+  // §3.3-4,5,6: 各設問の回答を検証（分岐で通らなかったページの必須はスキップ）
   var answers = payload.answers || {};
+  var visited = payload.visitedSections;
+  var restrict = visited && Array.isArray(visited) && visited.length > 0;
+  var secMap = formDef.itemSectionByItemId || {};
   for (var i = 0; i < formDef.items.length; i++) {
     var item = formDef.items[i];
-    var answer = answers[item.id];
+    if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') {
+      continue;
+    }
+    if (restrict) {
+      var sn = secMap[String(item.id)];
+      if (sn === undefined) sn = secMap[item.id];
+      if (!Validation_sectionVisited_(visited, sn)) {
+        continue;
+      }
+    }
+    var answer = Answers_lookup_(answers, item.id);
     var itemError = Validation_validateItem_(item, answer);
     if (itemError !== null) {
       return { valid: false, error: itemError };
@@ -46,6 +59,20 @@ function Validation_validate(payload, formDef) {
   }
 
   return { valid: true, error: null };
+}
+
+/**
+ * @param {number[]} visited
+ * @param {number} sectionNum
+ * @returns {boolean}
+ * @private
+ */
+function Validation_sectionVisited_(visited, sectionNum) {
+  if (sectionNum === undefined || sectionNum === null) return true;
+  for (var v = 0; v < visited.length; v++) {
+    if (Number(visited[v]) === Number(sectionNum)) return true;
+  }
+  return false;
 }
 
 /**
@@ -57,8 +84,19 @@ function Validation_validate(payload, formDef) {
  * @private
  */
 function Validation_validateItem_(item, answer) {
+  if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') {
+    return null;
+  }
+
   var isEmpty = (answer === undefined || answer === null || answer === '');
   var isArrayEmpty = Array.isArray(answer) && answer.length === 0;
+
+  if (item.type === 'GRID') {
+    return Validation_validateGrid_(item, answer);
+  }
+  if (item.type === 'CHECKBOX_GRID') {
+    return Validation_validateCheckboxGrid_(item, answer);
+  }
 
   // §3.3-4: 必須項目の未入力チェック
   if (item.required && (isEmpty || isArrayEmpty)) {
@@ -104,6 +142,76 @@ function Validation_validateItem_(item, answer) {
         }
       }
       break;
+  }
+
+  return null;
+}
+
+/**
+ * 単一選択グリッドの検証。
+ *
+ * @param {object} item
+ * @param {*} answer - 列値の配列（行と同じ長さ）
+ * @returns {string|null}
+ * @private
+ */
+function Validation_validateGrid_(item, answer) {
+  var rows = item.gridRows || [];
+  var cols = item.gridColumns || [];
+
+  if (!Array.isArray(answer)) {
+    if (item.required) {
+      return 'REQUIRED_MISSING:' + item.id;
+    }
+    return null;
+  }
+
+  for (var r = 0; r < rows.length; r++) {
+    var v = answer[r];
+    var blank = (v === undefined || v === null || v === '');
+    if (item.required && blank) {
+      return 'REQUIRED_MISSING:' + item.id;
+    }
+    if (!blank && cols.indexOf(String(v).trim()) === -1) {
+      return 'INVALID_CHOICE:' + item.id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * チェックボックスグリッドの検証。
+ *
+ * @param {object} item
+ * @param {*} answer - 行ごとの選択肢文字列の配列の配列
+ * @returns {string|null}
+ * @private
+ */
+function Validation_validateCheckboxGrid_(item, answer) {
+  var rows = item.gridRows || [];
+  var cols = item.gridColumns || [];
+
+  if (!Array.isArray(answer)) {
+    if (item.required) {
+      return 'REQUIRED_MISSING:' + item.id;
+    }
+    return null;
+  }
+
+  for (var r = 0; r < rows.length; r++) {
+    var rowAns = answer[r];
+    var emptyRow = !rowAns || rowAns.length === 0;
+    if (item.required && emptyRow) {
+      return 'REQUIRED_MISSING:' + item.id;
+    }
+    if (!emptyRow) {
+      for (var j = 0; j < rowAns.length; j++) {
+        if (cols.indexOf(String(rowAns[j]).trim()) === -1) {
+          return 'INVALID_CHOICE:' + item.id;
+        }
+      }
+    }
   }
 
   return null;

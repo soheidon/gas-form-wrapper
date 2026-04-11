@@ -1,3 +1,5 @@
 node_modules/
 .clasp.json
 *:Zone.Identifier
+tmp-preview-survey-ui.html
+tmp-screenshots/

@@ -21,7 +21,11 @@ function SubmitService_submit(formDef, answers) {
 
     for (var i = 0; i < formDef.items.length; i++) {
       var item = formDef.items[i];
-      var answer = answers[item.id];
+      if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') {
+        continue;
+      }
+
+      var answer = Answers_lookup_(answers, item.id);
 
       // 未回答はスキップ
       if (answer === undefined || answer === null || answer === '') {
@@ -29,6 +33,18 @@ function SubmitService_submit(formDef, answers) {
       }
       if (Array.isArray(answer) && answer.length === 0) {
         continue;
+      }
+      if (item.type === 'GRID' && Array.isArray(answer)) {
+        var gridAllEmpty = answer.every(function(x) {
+          return x === undefined || x === null || x === '';
+        });
+        if (gridAllEmpty) continue;
+      }
+      if (item.type === 'CHECKBOX_GRID' && Array.isArray(answer)) {
+        var cgAllEmpty = answer.every(function(row) {
+          return !row || row.length === 0;
+        });
+        if (cgAllEmpty) continue;
       }
 
       var itemResponse = SubmitService_createItemResponse_(form, item, answer);
@@ -62,6 +78,10 @@ function SubmitService_submit(formDef, answers) {
  * @private
  */
 function SubmitService_createItemResponse_(form, item, answer) {
+  if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') {
+    return null;
+  }
+
   // FormApp.openById で取得した form から Item を直接取得
   var formItem = form.getItemById(item.id);
   if (formItem === null) {
@@ -86,10 +106,66 @@ function SubmitService_createItemResponse_(form, item, answer) {
       var arr = Array.isArray(answer) ? answer : [answer];
       return formItem.asCheckboxItem().createResponse(arr);
 
+    case 'GRID':
+      return SubmitService_createGridResponse_(formItem.asGridItem(), item, answer);
+
+    case 'CHECKBOX_GRID':
+      return SubmitService_createCheckboxGridResponse_(formItem.asCheckboxGridItem(), item, answer);
+
     default:
       console.log('非対応の設問タイプ: ' + item.type);
       return null;
   }
+}
+
+/**
+ * 単一選択グリッドの ItemResponse を生成する。
+ *
+ * @param {GoogleAppsScript.Forms.GridItem} gridItem
+ * @param {object} item - フォーム定義
+ * @param {*} answer
+ * @returns {GoogleAppsScript.Forms.ItemResponse}
+ * @private
+ */
+function SubmitService_createGridResponse_(gridItem, item, answer) {
+  var rows = item.gridRows || [];
+  var ans = Array.isArray(answer) ? answer : [];
+  var responses = [];
+  for (var i = 0; i < rows.length; i++) {
+    var v = ans[i];
+    if (v === undefined || v === null || v === '') {
+      responses.push(null);
+    } else {
+      responses.push(String(v).trim());
+    }
+  }
+  return gridItem.createResponse(responses);
+}
+
+/**
+ * チェックボックスグリッドの ItemResponse を生成する。
+ *
+ * @param {GoogleAppsScript.Forms.CheckboxGridItem} cgItem
+ * @param {object} item
+ * @param {*} answer - String[][]
+ * @returns {GoogleAppsScript.Forms.ItemResponse}
+ * @private
+ */
+function SubmitService_createCheckboxGridResponse_(cgItem, item, answer) {
+  var rows = item.gridRows || [];
+  var ans = Array.isArray(answer) ? answer : [];
+  var responses = [];
+  for (var r = 0; r < rows.length; r++) {
+    var rowAns = ans[r];
+    if (!rowAns || rowAns.length === 0) {
+      responses.push(null);
+    } else {
+      responses.push(rowAns.map(function(v) {
+        return String(v).trim();
+      }));
+    }
+  }
+  return cgItem.createResponse(responses);
 }
 
 /**

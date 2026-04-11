@@ -1,89 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>院内アンケート</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
-    .container { max-width: 640px; margin: 24px auto; padding: 0 16px; }
-    .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .card-header { border-top: 4px solid #4285f4; border-radius: 8px 8px 0 0; }
-    h1 { font-size: 24px; font-weight: 500; margin-bottom: 8px; }
-    .required-mark { color: #d93025; margin-left: 4px; }
-    .question-title { font-size: 16px; font-weight: 500; margin-bottom: 12px; }
-    .help-text { color: #666; font-size: 13px; margin-bottom: 8px; }
-
-    input[type="text"], textarea, select {
-      width: 100%; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 4px;
-      font-size: 14px; transition: border-color 0.2s;
-    }
-    input[type="text"]:focus, textarea:focus, select:focus { outline: none; border-color: #4285f4; border-width: 2px; }
-    textarea { min-height: 80px; resize: vertical; }
-
-    .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 8px; }
-    .radio-group label, .checkbox-group label {
-      display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; cursor: pointer;
-    }
-    .radio-group label:hover, .checkbox-group label:hover { background: #f8f9fa; }
-
-    .btn { padding: 10px 24px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
-    .btn-primary { background: #4285f4; color: #fff; }
-    .btn-primary:hover { background: #3367d6; }
-    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-
-    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .msg-success { background: #e6f4ea; color: #137333; padding: 16px; border-radius: 4px; }
-    .msg-error { background: #fce8e6; color: #c5221f; padding: 16px; border-radius: 4px; }
-    .msg-received { background: #fef7e0; color: #b06000; padding: 16px; border-radius: 4px; }
-    .msg-info { background: #e8f0fe; color: #1967d2; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 13px; }
-    .loading { text-align: center; padding: 40px; color: #666; }
-
-    .footer { text-align: right; padding-top: 8px; }
-    .submission-id { font-size: 12px; color: #999; margin-top: 8px; }
-  </style>
+  <title>アンケート</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+  <?!= HtmlService.createHtmlOutputFromFile('html/styles.css').getContent(); ?>
 </head>
 <body>
   <div class="container">
-    <div id="loading" class="card loading">読み込み中...</div>
-    <div id="form-area" style="display:none;"></div>
+    <h1 id="main-title" class="main-form-title" hidden></h1>
+    <p id="main-form-description" class="main-form-description question-description" hidden></p>
+
+    <div id="loading" class="loading-state">読み込み中...</div>
+
+    <div id="form-area" style="display:none;">
+      <div class="progress-container" id="progress-wrap" style="display:none;">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div id="dynamic-form-area"></div>
+    </div>
+
     <div id="result-area" style="display:none;"></div>
   </div>
 
   <script>
-    // =========================================================================
-    // 状態管理
-    // =========================================================================
     var state = {
       formDef: null,
       submissionId: null,
       answers: {},
       submitting: false,
-      draftRestored: false
+      draftRestored: false,
+      currentSection: 1,
+      totalSections: 1,
+      itemSection: {},
+      visitedSections: {}
     };
 
-    // =========================================================================
-    // 下書き保存（localStorage）
-    // バージョン不一致やリロード時に入力内容を復元するための仕組み。
-    // submissionId ではなく固定キー "survey_draft" で保存する
-    // （リロード後に新しい submissionId が振られるため）。
-    // TTL: 2時間（古い下書きを自動的に無効化）。
-    // =========================================================================
     var DRAFT_KEY = 'survey_draft';
-    var DRAFT_TTL_MS = 2 * 60 * 60 * 1000; // 2時間
+    var DRAFT_TTL_MS = 2 * 60 * 60 * 1000;
+    var sectionListenersBound = false;
 
     function Draft_save(answers) {
       try {
-        var data = {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
           answers: answers,
           savedAt: Date.now()
-        };
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
-      } catch (e) {
-        // localStorage 使用不可の場合は無視
-      }
+        }));
+      } catch (e) {}
     }
 
     function Draft_load() {
@@ -91,7 +58,6 @@
         var raw = localStorage.getItem(DRAFT_KEY);
         if (!raw) return null;
         var data = JSON.parse(raw);
-        // TTL チェック
         if (Date.now() - data.savedAt > DRAFT_TTL_MS) {
           localStorage.removeItem(DRAFT_KEY);
           return null;
@@ -105,14 +71,9 @@
     function Draft_clear() {
       try {
         localStorage.removeItem(DRAFT_KEY);
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     }
 
-    // =========================================================================
-    // UUID 生成
-    // =========================================================================
     function generateUUID() {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0;
@@ -120,9 +81,576 @@
       });
     }
 
-    // =========================================================================
-    // 初期化
-    // =========================================================================
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeAttr(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
+    function domIdFieldHidden(itemId) {
+      return 'field-' + itemId + '-hidden';
+    }
+    function domIdFieldError(itemId, isMc) {
+      return isMc ? ('field-' + itemId + '-hidden-error') : ('field-' + itemId + '-error');
+    }
+
+    function getFormItemById(itemId) {
+      if (!state.formDef) return null;
+      for (var i = 0; i < state.formDef.items.length; i++) {
+        if (state.formDef.items[i].id === itemId) return state.formDef.items[i];
+      }
+      return null;
+    }
+
+    function getFieldErrorEl(itemId) {
+      var g = document.getElementById('group-' + itemId);
+      return g ? g.querySelector('.error-message') : null;
+    }
+
+    function clearFieldError(itemId) {
+      var el = getFieldErrorEl(itemId);
+      if (el) el.style.display = 'none';
+      var group = document.getElementById('group-' + itemId);
+      if (group) {
+        var bo = group.querySelector('.button-option');
+        if (bo) bo.classList.remove('error-state');
+        var rg = group.querySelector('.radio-group-standard');
+        if (rg) rg.classList.remove('error-state');
+        var sc = group.querySelector('.scale-container');
+        if (sc) sc.classList.remove('error-state');
+        var errRows = group.querySelectorAll('.scale-table tbody tr.error-state');
+        for (var i = 0; i < errRows.length; i++) errRows[i].classList.remove('error-state');
+      }
+    }
+
+    function clearAllFieldErrors() {
+      if (!state.formDef) return;
+      for (var i = 0; i < state.formDef.items.length; i++) {
+        var it = state.formDef.items[i];
+        if (it.type === 'PAGE_BREAK' || it.type === 'SECTION_HEADER') continue;
+        clearFieldError(it.id);
+      }
+    }
+
+    function showFieldError(itemId, message) {
+      var el = getFieldErrorEl(itemId);
+      if (el) {
+        el.textContent = message || '入力または選択してください。';
+        el.style.display = 'block';
+      }
+      var group = document.getElementById('group-' + itemId);
+      if (group) {
+        var bo = group.querySelector('.button-option');
+        if (bo) bo.classList.add('error-state');
+        var rg = group.querySelector('.radio-group-standard');
+        if (rg) rg.classList.add('error-state');
+        var item = getFormItemById(itemId);
+        if (item && (item.type === 'GRID' || item.type === 'CHECKBOX_GRID')) {
+          var tbody = group.querySelector('.scale-table tbody');
+          if (tbody) {
+            var trs = tbody.querySelectorAll('tr');
+            for (var r = 0; r < trs.length; r++) {
+              var row = trs[r];
+              var ok = row.querySelector('input[type="radio"]:checked, input[type="checkbox"]:checked');
+              if (!ok) row.classList.add('error-state');
+            }
+          }
+          var sc = group.querySelector('.scale-container');
+          if (sc) sc.classList.add('error-state');
+        }
+      }
+    }
+
+    function validateItemInSection(item, secEl) {
+      var g = secEl.querySelector('#group-' + item.id);
+      if (!g) return null;
+      if (!item.required) return null;
+
+      switch (item.type) {
+        case 'TEXT':
+        case 'PARAGRAPH_TEXT':
+        case 'LIST': {
+          var el = secEl.querySelector('#input_' + item.id);
+          var v = el ? String(el.value).trim() : '';
+          if (!v) return '入力または選択してください。';
+          return null;
+        }
+        case 'MULTIPLE_CHOICE': {
+          var h = secEl.querySelector('#' + domIdFieldHidden(item.id));
+          if (!h || !String(h.value).trim()) return '選択してください。';
+          return null;
+        }
+        case 'CHECKBOX': {
+          var n = secEl.querySelectorAll('input[name="q_' + item.id + '"]:checked').length;
+          if (n === 0) return '選択してください。';
+          return null;
+        }
+        case 'GRID': {
+          for (var r = 0; r < item.gridRows.length; r++) {
+            var sel = secEl.querySelector('input[name="grid_' + item.id + '_' + r + '"]:checked');
+            if (!sel) return 'すべての行に回答してください。';
+          }
+          return null;
+        }
+        case 'CHECKBOX_GRID': {
+          for (var r2 = 0; r2 < item.gridRows.length; r2++) {
+            var n2 = secEl.querySelectorAll('input[name="gridcb_' + item.id + '_' + r2 + '"]:checked').length;
+            if (n2 === 0) return 'すべての行に1つ以上選択してください。';
+          }
+          return null;
+        }
+        default:
+          return null;
+      }
+    }
+
+    function validateSection(sectionNum, silent) {
+      silent = !!silent;
+      var sec = document.getElementById('section-' + sectionNum);
+      if (!sec) return true;
+      var valid = true;
+      for (var i = 0; i < state.formDef.items.length; i++) {
+        var item = state.formDef.items[i];
+        if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        if (state.itemSection[item.id] !== sectionNum) continue;
+        var msg = validateItemInSection(item, sec);
+        if (msg) {
+          valid = false;
+          showFieldError(item.id, msg);
+        }
+      }
+      if (!valid && !silent) {
+        alert('未入力または無効な項目があります。赤枠またはメッセージをご確認ください。');
+        var fe = sec.querySelector('.error-message[style*="block"]');
+        if (fe) fe.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return valid;
+    }
+
+    /** 分岐で実際に表示したセクションのみ必須検証（スキップしたページは対象外） */
+    function validateVisitedSections() {
+      clearAllFieldErrors();
+      var ok = true;
+      var firstBad = null;
+      for (var s = 1; s <= state.totalSections; s++) {
+        if (!state.visitedSections[s]) continue;
+        if (!validateSection(s, true)) {
+          ok = false;
+          if (!firstBad) firstBad = s;
+        }
+      }
+      if (!ok) {
+        showSection(firstBad);
+        alert('未入力または無効な項目があります。赤枠またはメッセージをご確認ください。');
+        var fe = document.querySelector('.error-message[style*="block"]');
+        if (fe) fe.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return ok;
+    }
+
+    function visitedSectionsArrayFromState() {
+      var arr = [];
+      for (var k in state.visitedSections) {
+        if (state.visitedSections[k]) arr.push(Number(k));
+      }
+      arr.sort(function(a, b) {
+        return a - b;
+      });
+      return arr;
+    }
+
+    function syncAnswersFromDom() {
+      if (!state.formDef) return;
+      var raw = readAnswersFromDom(state.formDef);
+      for (var key in raw) {
+        if (Object.prototype.hasOwnProperty.call(raw, key)) {
+          state.answers[key] = raw[key];
+        }
+      }
+    }
+
+    function resolveBranchStepAfterSection(sectionNum) {
+      var items = state.formDef.items;
+      var pbMap = state.formDef.pageBreakIdToSectionNumber || {};
+      var lastNav = null;
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (item.type !== 'MULTIPLE_CHOICE' || !item.choiceNavigations || item.choiceNavigations.length === 0) {
+          continue;
+        }
+        var sec = state.itemSection[item.id];
+        if (sec === undefined) sec = state.itemSection[String(item.id)];
+        if (sec !== sectionNum) continue;
+        var ans = state.answers[item.id];
+        if (ans === undefined || ans === null || ans === '') {
+          ans = state.answers[String(item.id)];
+        }
+        if (ans === undefined || ans === null || ans === '') continue;
+        var idx = item.choices.indexOf(String(ans).trim());
+        if (idx < 0) continue;
+        var nav = item.choiceNavigations[idx];
+        if (!nav || nav.type === 'CONTINUE') continue;
+        lastNav = nav;
+      }
+      if (!lastNav || lastNav.type === 'CONTINUE') {
+        return { action: 'NEXT' };
+      }
+      if (lastNav.type === 'SUBMIT') {
+        return { action: 'SUBMIT' };
+      }
+      if (lastNav.type === 'RESTART') {
+        return { action: 'RESTART' };
+      }
+      if (lastNav.type === 'GO_TO_PAGE' && lastNav.pageBreakId != null) {
+        var ts = pbMap[String(lastNav.pageBreakId)];
+        if (ts !== undefined && ts !== null) {
+          return { action: 'GOTO', targetSection: ts };
+        }
+        return { action: 'GOTO', targetSection: 1 };
+      }
+      return { action: 'NEXT' };
+    }
+
+    function goForwardFromSection(sectionNum) {
+      if (!validateSection(sectionNum, false)) return;
+      syncAnswersFromDom();
+      var step = resolveBranchStepAfterSection(sectionNum);
+      if (step.action === 'SUBMIT') {
+        if (!validateVisitedSections()) return;
+        runSubmitFlow();
+        return;
+      }
+      if (step.action === 'RESTART') {
+        state.visitedSections = {};
+        showSection(1);
+        return;
+      }
+      if (step.action === 'GOTO') {
+        showSection(step.targetSection);
+        return;
+      }
+      if (sectionNum < state.totalSections) {
+        showSection(sectionNum + 1);
+        return;
+      }
+      if (!validateVisitedSections()) return;
+      runSubmitFlow();
+    }
+
+    function updateMainDescriptionVisibility(sectionNum) {
+      var d = document.getElementById('main-form-description');
+      if (d) d.hidden = sectionNum !== 1;
+    }
+
+    function updateProgress() {
+      var bar = document.getElementById('progressBar');
+      if (!bar) return;
+      var t = state.totalSections;
+      var p = t > 1 ? ((state.currentSection - 1) / (t - 1)) * 100 : 0;
+      bar.style.width = p + '%';
+    }
+
+    function showSection(n) {
+      state.currentSection = n;
+      state.visitedSections[n] = true;
+      updateMainDescriptionVisibility(n);
+      for (var i = 1; i <= state.totalSections; i++) {
+        var el = document.getElementById('section-' + i);
+        if (!el) continue;
+        if (i === n) {
+          el.classList.add('active');
+          el.style.setProperty('display', 'block', 'important');
+        } else {
+          el.classList.remove('active');
+          el.style.setProperty('display', 'none', 'important');
+        }
+      }
+      updateProgress();
+      window.scrollTo(0, 0);
+    }
+
+    function addNavigationButtons(sectionDiv, currentSectionNum, totalSectionCount) {
+      var old = sectionDiv.querySelector('.button-group');
+      if (old) old.remove();
+      var bg = document.createElement('div');
+      bg.className = 'button-group';
+      bg.style.display = 'flex';
+
+      if (currentSectionNum > 1) {
+        var prev = document.createElement('button');
+        prev.type = 'button';
+        prev.className = 'page-prev';
+        prev.textContent = '前へ';
+        prev.onclick = function() {
+          syncAnswersFromDom();
+          showSection(currentSectionNum - 1);
+        };
+        bg.appendChild(prev);
+      }
+
+      if (currentSectionNum < totalSectionCount) {
+        var next = document.createElement('button');
+        next.type = 'button';
+        next.className = 'page-next';
+        next.textContent = '次へ';
+        next.onclick = function() {
+          goForwardFromSection(currentSectionNum);
+        };
+        bg.appendChild(next);
+      } else {
+        var sub = document.createElement('button');
+        sub.type = 'button';
+        sub.id = 'submit-button';
+        sub.className = 'page-next';
+        sub.textContent = '送信する';
+        sub.onclick = function() {
+          if (!validateVisitedSections()) return;
+          runSubmitFlow();
+        };
+        bg.appendChild(sub);
+      }
+
+      sectionDiv.appendChild(bg);
+    }
+
+    function renderSectionHeaderBlock(item) {
+      var h = '';
+      var st = item.title ? String(item.title).trim() : '';
+      if (st) {
+        h += '<h2 class="section-header-title">' + escapeHtml(st) + '</h2>';
+      }
+      if (item.helpText) {
+        h += '<p class="question-description section-lead-text">' +
+          escapeHtml(item.helpText).replace(/\n/g, '<br>') + '</p>';
+      }
+      return h;
+    }
+
+    function renderQuestion(item) {
+      var gid = 'group-' + item.id;
+      var html = '<div class="form-group" id="' + gid + '" data-item-id="' + item.id + '">';
+
+      var headingOpen;
+      var headingClose;
+      if (item.type === 'CHECKBOX') {
+        headingOpen = '<div class="field-heading">';
+        headingClose = '</div>';
+      } else if (item.type === 'MULTIPLE_CHOICE') {
+        headingOpen = '<label class="field-heading" for="' + domIdFieldHidden(item.id) + '">';
+        headingClose = '</label>';
+      } else if (item.type === 'GRID' || item.type === 'CHECKBOX_GRID') {
+        headingOpen = '<div class="field-heading">';
+        headingClose = '</div>';
+      } else {
+        headingOpen = '<label class="field-heading" for="input_' + item.id + '">';
+        headingClose = '</label>';
+      }
+
+      var titleTrim = item.title ? String(item.title).trim() : '';
+      if (titleTrim) {
+        html += headingOpen;
+        html += escapeHtml(titleTrim);
+        if (item.required) {
+          html += '<span class="required-asterisk">*</span>';
+        }
+        html += headingClose;
+      } else if (item.type === 'MULTIPLE_CHOICE') {
+        html += '<label class="sr-only" for="' + domIdFieldHidden(item.id) + '">選択してください</label>';
+        if (item.required) {
+          html += '<span class="sr-only"><span class="required-asterisk">*</span> 必須</span>';
+        }
+      }
+
+      if (item.type === 'GRID' || item.type === 'CHECKBOX_GRID') {
+        if (item.helpText) {
+          html += '<div class="grid-main-label">' + escapeHtml(item.helpText).replace(/\n/g, '<br>') + '</div>';
+        }
+      } else if (item.helpText) {
+        html += '<p class="question-description">' + escapeHtml(item.helpText).replace(/\n/g, '<br>') + '</p>';
+      }
+
+      switch (item.type) {
+        case 'TEXT':
+          html += '<input type="text" id="input_' + item.id + '" name="input_' + item.id + '"' +
+            (item.required ? ' required' : '') + '>';
+          break;
+        case 'PARAGRAPH_TEXT':
+          html += '<textarea id="input_' + item.id + '" name="input_' + item.id + '"' +
+            (item.required ? ' required' : '') + '></textarea>';
+          break;
+        case 'MULTIPLE_CHOICE':
+          html += '<div class="button-option">';
+          for (var i = 0; i < item.choices.length; i++) {
+            var ch = item.choices[i];
+            html += '<button type="button" class="option-button" data-item-id="' + item.id +
+              '" data-value="' + escapeAttr(ch) + '">' + escapeHtml(ch) + '</button>';
+          }
+          html += '</div>';
+          html += '<input type="hidden" id="' + domIdFieldHidden(item.id) + '" name="' + item.id + '" value="">';
+          break;
+        case 'CHECKBOX':
+          html += '<div class="radio-group-standard">';
+          for (var j = 0; j < item.choices.length; j++) {
+            var c = item.choices[j];
+            var cbId = 'cb_' + item.id + '_' + j;
+            html += '<div class="radio-option-standard">';
+            html += '<input type="checkbox" name="q_' + item.id + '" id="' + cbId +
+              '" value="' + escapeAttr(c) + '" onchange="updateCheckbox(' + item.id + ')">';
+            html += '<label for="' + cbId + '">' + escapeHtml(c) + '</label>';
+            html += '</div>';
+          }
+          html += '</div>';
+          break;
+        case 'LIST':
+          html += '<select id="input_' + item.id + '" name="input_' + item.id + '"' +
+            (item.required ? ' required' : '') + '>';
+          html += '<option value="" disabled selected>選択してください</option>';
+          for (var k = 0; k < item.choices.length; k++) {
+            var c2 = item.choices[k];
+            html += '<option value="' + escapeAttr(c2) + '">' + escapeHtml(c2) + '</option>';
+          }
+          html += '</select>';
+          break;
+        case 'GRID':
+          html += '<div class="scale-container"><table class="scale-table"><thead><tr><th></th>';
+          for (var ci = 0; ci < item.gridColumns.length; ci++) {
+            html += '<th>' + escapeHtml(item.gridColumns[ci]).replace(/\n/g, '<br>') + '</th>';
+          }
+          html += '</tr></thead><tbody>';
+          for (var ri = 0; ri < item.gridRows.length; ri++) {
+            html += '<tr><td>' + escapeHtml(item.gridRows[ri]).replace(/\n/g, '<br>') + '</td>';
+            for (var cj = 0; cj < item.gridColumns.length; cj++) {
+              var colVal = item.gridColumns[cj];
+              var nm = 'grid_' + item.id + '_' + ri;
+              var iid = 'field-grid-' + item.id + '-r' + ri + '-c' + cj;
+              html += '<td><input type="radio" name="' + nm + '" id="' + iid + '" value="' +
+                escapeAttr(colVal) + '"' + (item.required ? ' required' : '') + '></td>';
+            }
+            html += '</tr>';
+          }
+          html += '</tbody></table></div>';
+          break;
+        case 'CHECKBOX_GRID':
+          html += '<div class="scale-container"><table class="scale-table"><thead><tr><th></th>';
+          for (var ci2 = 0; ci2 < item.gridColumns.length; ci2++) {
+            html += '<th>' + escapeHtml(item.gridColumns[ci2]).replace(/\n/g, '<br>') + '</th>';
+          }
+          html += '</tr></thead><tbody>';
+          for (var ri2 = 0; ri2 < item.gridRows.length; ri2++) {
+            html += '<tr><td>' + escapeHtml(item.gridRows[ri2]).replace(/\n/g, '<br>') + '</td>';
+            for (var cj2 = 0; cj2 < item.gridColumns.length; cj2++) {
+              var colVal2 = item.gridColumns[cj2];
+              var cbid = 'field-cbgrid-' + item.id + '-r' + ri2 + '-c' + cj2;
+              var nmb = 'gridcb_' + item.id + '_' + ri2;
+              html += '<td><input type="checkbox" name="' + nmb + '" id="' + cbid + '" value="' +
+                escapeAttr(colVal2) + '"></td>';
+            }
+            html += '</tr>';
+          }
+          html += '</tbody></table></div>';
+          break;
+        default:
+          html += '<p class="question-description">未対応の設問タイプです。</p>';
+      }
+
+      var errId = domIdFieldError(item.id, item.type === 'MULTIPLE_CHOICE');
+      html += '<div class="error-message" id="' + errId + '"></div>';
+      html += '</div>';
+      return html;
+    }
+
+    function bindSectionListenersOnce() {
+      if (sectionListenersBound) return;
+      sectionListenersBound = true;
+      var root = document.getElementById('dynamic-form-area');
+      if (!root) return;
+
+      root.addEventListener('click', function(e) {
+        var btn = e.target.closest('button.option-button');
+        if (!btn || !root.contains(btn)) return;
+        var itemId = parseInt(btn.getAttribute('data-item-id'), 10);
+        var value = btn.getAttribute('data-value');
+        if (value === null) return;
+        var wrap = btn.closest('.button-option');
+        var all = wrap ? wrap.querySelectorAll('.option-button') : [];
+        for (var i = 0; i < all.length; i++) all[i].classList.remove('selected');
+        btn.classList.add('selected');
+        var hidden = document.getElementById(domIdFieldHidden(itemId));
+        if (hidden) hidden.value = value;
+        updateAnswer(itemId, value);
+        clearFieldError(itemId);
+      });
+
+      root.addEventListener('change', function(e) {
+        var t = e.target;
+        if (t.name && t.name.indexOf('q_') === 0) {
+          var itemId = parseInt(t.name.replace(/^q_/, ''), 10);
+          if (!isNaN(itemId)) clearFieldError(itemId);
+          return;
+        }
+        if (t.name && /^grid_\d+_\d+$/.test(t.name)) {
+          var m = t.name.match(/^grid_(\d+)_(\d+)$/);
+          if (m) updateGridAnswer(parseInt(m[1], 10));
+          return;
+        }
+        if (t.name && /^gridcb_\d+_\d+$/.test(t.name)) {
+          var m2 = t.name.match(/^gridcb_(\d+)_(\d+)$/);
+          if (m2) updateCheckboxGridAnswer(parseInt(m2[1], 10));
+          return;
+        }
+        if (t.id && t.id.indexOf('input_') === 0) {
+          var id = parseInt(t.id.replace(/^input_/, ''), 10);
+          if (!isNaN(id)) clearFieldError(id);
+        }
+      });
+
+      root.addEventListener('input', function(e) {
+        var t = e.target;
+        if (t.id && t.id.indexOf('input_') === 0) {
+          var itemId = parseInt(t.id.replace(/^input_/, ''), 10);
+          if (!isNaN(itemId)) clearFieldError(itemId);
+        }
+      });
+    }
+
+    function updateGridAnswer(itemId) {
+      var item = getFormItemById(itemId);
+      if (!item || item.type !== 'GRID') return;
+      var arr = [];
+      for (var r = 0; r < item.gridRows.length; r++) {
+        var sel = document.querySelector('input[name="grid_' + item.id + '_' + r + '"]:checked');
+        arr.push(sel ? sel.value : '');
+      }
+      state.answers[itemId] = arr;
+      Draft_save(state.answers);
+      clearFieldError(itemId);
+    }
+
+    function updateCheckboxGridAnswer(itemId) {
+      var item = getFormItemById(itemId);
+      if (!item || item.type !== 'CHECKBOX_GRID') return;
+      var out = [];
+      for (var r = 0; r < item.gridRows.length; r++) {
+        var checked = document.querySelectorAll('input[name="gridcb_' + item.id + '_' + r + '"]:checked');
+        var row = [];
+        for (var j = 0; j < checked.length; j++) row.push(checked[j].value);
+        out.push(row);
+      }
+      state.answers[itemId] = out;
+      Draft_save(state.answers);
+      clearFieldError(itemId);
+    }
+
     function init() {
       state.submissionId = generateUUID();
       google.script.run
@@ -134,7 +662,26 @@
     function onFormDefLoaded(formDef) {
       state.formDef = formDef;
 
-      // 下書き復元を試みる
+      var mainTitleEl = document.getElementById('main-title');
+      var ft = (formDef.formTitle || '').trim();
+      if (!ft) ft = 'アンケート';
+      if (mainTitleEl) {
+        mainTitleEl.textContent = ft;
+        mainTitleEl.hidden = false;
+      }
+      var descEl = document.getElementById('main-form-description');
+      var fd = (formDef.formDescription || '').trim();
+      if (descEl) {
+        if (fd) {
+          descEl.innerHTML = escapeHtml(fd).replace(/\n/g, '<br>');
+          descEl.hidden = false;
+        } else {
+          descEl.textContent = '';
+          descEl.hidden = true;
+        }
+      }
+      document.title = ft;
+
       var draft = Draft_load();
       if (draft && Object.keys(draft).length > 0) {
         state.answers = draft;
@@ -142,94 +689,113 @@
       }
 
       renderForm(formDef);
+      wireInputs(formDef);
+      bindSectionListenersOnce();
+
+      document.getElementById('progress-wrap').style.display = state.totalSections > 1 ? 'block' : 'none';
+      showSection(1);
+
       document.getElementById('loading').style.display = 'none';
       document.getElementById('form-area').style.display = 'block';
     }
 
     function onLoadError(error) {
       document.getElementById('loading').innerHTML =
-        '<div class="msg-error">読み込みに失敗しました。画面を再読み込みしてください。<br><small>' + error.message + '</small></div>';
+        '<div class="alert-error">読み込みに失敗しました。画面を再読み込みしてください。<br><small>' +
+        escapeHtml(error.message) + '</small></div>';
     }
 
-    // =========================================================================
-    // フォーム描画
-    // =========================================================================
     function renderForm(formDef) {
-      var area = document.getElementById('form-area');
-      var html = '';
+      var items = formDef.items;
+      state.itemSection = {};
+      var imb = formDef.itemSectionByItemId || {};
+      for (var ik in imb) {
+        if (!Object.prototype.hasOwnProperty.call(imb, ik)) continue;
+        var sn = imb[ik];
+        state.itemSection[ik] = sn;
+        var nk = parseInt(ik, 10);
+        if (!isNaN(nk)) state.itemSection[nk] = sn;
+      }
+      state.visitedSections = {};
+      var sectionsData = [{ parts: [], pageTitle: '', pageHelp: '' }];
+      var sectionIndex = 0;
 
-      html += '<div class="card card-header"><h1>院内アンケート</h1></div>';
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
 
-      // 下書き復元通知
-      if (state.draftRestored) {
-        html += '<div class="msg-info">前回の入力内容を復元しました。内容を確認してから送信してください。</div>';
+        if (item.type === 'PAGE_BREAK') {
+          sectionsData.push({
+            parts: [],
+            pageTitle: item.title || '',
+            pageHelp: item.helpText || ''
+          });
+          sectionIndex = sectionsData.length - 1;
+          continue;
+        }
+
+        if (item.type === 'SECTION_HEADER') {
+          sectionsData[sectionIndex].parts.push(renderSectionHeaderBlock(item));
+          continue;
+        }
+
+        sectionsData[sectionIndex].parts.push(renderQuestion(item));
       }
 
-      for (var i = 0; i < formDef.items.length; i++) {
-        html += renderQuestion(formDef.items[i]);
+      state.totalSections = sectionsData.length;
+      var root = document.getElementById('dynamic-form-area');
+      root.innerHTML = '';
+
+      var draftBanner =
+        '<div id="draft-banner" class="help-text-container" style="display:none;">' +
+        '<div class="help-text-title">入力の復元</div>' +
+        '<div class="help-text-content">前回の入力内容を復元しました。内容を確認してから送信してください。</div>' +
+        '</div>';
+
+      for (var s = 0; s < sectionsData.length; s++) {
+        var sd = sectionsData[s];
+        var div = document.createElement('div');
+        div.id = 'section-' + (s + 1);
+        div.className = 'form-section';
+        div.style.display = 'none';
+
+        var inner = sd.parts.join('');
+        if (s === 0) {
+          inner = '<div id="form-alerts"></div>' + draftBanner + inner;
+        }
+        if (sd.pageTitle || sd.pageHelp) {
+          var ph = '';
+          var pt = sd.pageTitle ? String(sd.pageTitle).trim() : '';
+          if (pt) {
+            ph += '<h2 class="section-header-title">' + escapeHtml(pt) + '</h2>';
+          }
+          if (sd.pageHelp) {
+            ph += '<p class="question-description section-lead-text">' +
+              escapeHtml(sd.pageHelp).replace(/\n/g, '<br>') + '</p>';
+          }
+          inner = ph + inner;
+        }
+
+        div.innerHTML = inner;
+        addNavigationButtons(div, s + 1, sectionsData.length);
+        root.appendChild(div);
       }
 
-      html += '<div class="card footer">';
-      html += '<button id="submit-btn" class="btn btn-primary" onclick="handleSubmit()">送信</button>';
-      html += '</div>';
-
-      area.innerHTML = html;
-
-      // 下書きがある場合、フォームに値を復元
       if (state.draftRestored) {
+        var db = document.getElementById('draft-banner');
+        if (db) db.style.display = 'block';
         restoreFormValues(formDef);
+      } else {
+        var db2 = document.getElementById('draft-banner');
+        if (db2) db2.style.display = 'none';
       }
     }
 
-    function renderQuestion(item) {
-      var html = '<div class="card" data-item-id="' + item.id + '">';
-      html += '<div class="question-title">' + escapeHtml(item.title);
-      if (item.required) html += '<span class="required-mark">*</span>';
-      html += '</div>';
-      if (item.helpText) html += '<div class="help-text">' + escapeHtml(item.helpText) + '</div>';
-
-      switch (item.type) {
-        case 'TEXT':
-          html += '<input type="text" id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)" oninput="updateAnswer(' + item.id + ', this.value)">';
-          break;
-        case 'PARAGRAPH_TEXT':
-          html += '<textarea id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)" oninput="updateAnswer(' + item.id + ', this.value)"></textarea>';
-          break;
-        case 'MULTIPLE_CHOICE':
-          html += '<div class="radio-group">';
-          for (var i = 0; i < item.choices.length; i++) {
-            html += '<label><input type="radio" name="q_' + item.id + '" value="' + escapeHtml(item.choices[i]) + '" onchange="updateAnswer(' + item.id + ', this.value)"> ' + escapeHtml(item.choices[i]) + '</label>';
-          }
-          html += '</div>';
-          break;
-        case 'CHECKBOX':
-          html += '<div class="checkbox-group">';
-          for (var i = 0; i < item.choices.length; i++) {
-            html += '<label><input type="checkbox" name="q_' + item.id + '" value="' + escapeHtml(item.choices[i]) + '" onchange="updateCheckbox(' + item.id + ')"> ' + escapeHtml(item.choices[i]) + '</label>';
-          }
-          html += '</div>';
-          break;
-        case 'LIST':
-          html += '<select id="input_' + item.id + '" onchange="updateAnswer(' + item.id + ', this.value)">';
-          html += '<option value="">選択してください</option>';
-          for (var i = 0; i < item.choices.length; i++) {
-            html += '<option value="' + escapeHtml(item.choices[i]) + '">' + escapeHtml(item.choices[i]) + '</option>';
-          }
-          html += '</select>';
-          break;
-      }
-
-      html += '</div>';
-      return html;
-    }
-
-    /**
-     * 下書きから復元した値をフォームのDOM要素に反映する。
-     */
     function restoreFormValues(formDef) {
       for (var i = 0; i < formDef.items.length; i++) {
         var item = formDef.items[i];
+        if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
         var answer = state.answers[item.id];
+        if (answer === undefined || answer === null) answer = state.answers[String(item.id)];
         if (answer === undefined || answer === null) continue;
 
         switch (item.type) {
@@ -243,9 +809,11 @@
             if (sel) sel.value = answer;
             break;
           case 'MULTIPLE_CHOICE':
-            var radios = document.querySelectorAll('input[name="q_' + item.id + '"]');
-            for (var j = 0; j < radios.length; j++) {
-              if (radios[j].value === answer) radios[j].checked = true;
+            var h = document.getElementById(domIdFieldHidden(item.id));
+            if (h) h.value = answer;
+            var btns = document.querySelectorAll('.option-button[data-item-id="' + item.id + '"]');
+            for (var b = 0; b < btns.length; b++) {
+              if (btns[b].getAttribute('data-value') === answer) btns[b].classList.add('selected');
             }
             break;
           case 'CHECKBOX':
@@ -256,41 +824,193 @@
               }
             }
             break;
+          case 'GRID':
+            if (Array.isArray(answer)) {
+              for (var r = 0; r < answer.length; r++) {
+                var v = answer[r];
+                if (!v) continue;
+                var inputs = document.querySelectorAll('input[name="grid_' + item.id + '_' + r + '"]');
+                for (var ii = 0; ii < inputs.length; ii++) {
+                  if (inputs[ii].value === v) inputs[ii].checked = true;
+                }
+              }
+            }
+            break;
+          case 'CHECKBOX_GRID':
+            if (Array.isArray(answer)) {
+              for (var r2 = 0; r2 < answer.length; r2++) {
+                var rowAns = answer[r2];
+                if (!Array.isArray(rowAns)) continue;
+                var inputs2 = document.querySelectorAll('input[name="gridcb_' + item.id + '_' + r2 + '"]');
+                for (var k = 0; k < rowAns.length; k++) {
+                  var val = rowAns[k];
+                  for (var ii2 = 0; ii2 < inputs2.length; ii2++) {
+                    if (inputs2[ii2].value === val) inputs2[ii2].checked = true;
+                  }
+                }
+              }
+            }
+            break;
         }
       }
     }
 
-    // =========================================================================
-    // 回答値の更新（入力のたびに下書き保存）
-    // =========================================================================
     function updateAnswer(itemId, value) {
       state.answers[itemId] = value;
       Draft_save(state.answers);
+      var el = document.getElementById('input_' + itemId);
+      if (el && (el.type === 'text' || el.tagName === 'TEXTAREA')) {
+        el.value = value;
+      }
+    }
+
+    function wireInputs(formDef) {
+      for (var i = 0; i < formDef.items.length; i++) {
+        var item = formDef.items[i];
+        if (item.type === 'TEXT' || item.type === 'PARAGRAPH_TEXT') {
+          var node = document.getElementById('input_' + item.id);
+          if (node) {
+            node.addEventListener('input', function(id) {
+              return function() {
+                updateAnswer(id, this.value);
+              };
+            }(item.id));
+          }
+        }
+        if (item.type === 'LIST') {
+          var sel = document.getElementById('input_' + item.id);
+          if (sel) {
+            sel.addEventListener('change', function(id) {
+              return function() {
+                updateAnswer(id, this.value);
+              };
+            }(item.id));
+          }
+        }
+      }
     }
 
     function updateCheckbox(itemId) {
       var checkboxes = document.querySelectorAll('input[name="q_' + itemId + '"]:checked');
       var values = [];
-      for (var i = 0; i < checkboxes.length; i++) {
-        values.push(checkboxes[i].value);
-      }
+      for (var i = 0; i < checkboxes.length; i++) values.push(checkboxes[i].value);
       state.answers[itemId] = values;
       Draft_save(state.answers);
     }
 
-    // =========================================================================
-    // 送信処理
-    // =========================================================================
-    function handleSubmit() {
-      if (state.submitting) return;
-      state.submitting = true;
+    function readAnswersFromDom(formDef) {
+      var out = {};
+      for (var i = 0; i < formDef.items.length; i++) {
+        var item = formDef.items[i];
+        if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
 
-      var btn = document.getElementById('submit-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>送信中...';
+        switch (item.type) {
+          case 'TEXT':
+          case 'PARAGRAPH_TEXT':
+            var t = document.getElementById('input_' + item.id);
+            out[item.id] = t ? t.value : '';
+            break;
+          case 'LIST':
+            var s = document.getElementById('input_' + item.id);
+            var sv = s ? s.value : '';
+            if (sv && item.choices && item.choices.indexOf(sv) === -1) {
+              sv = '';
+            }
+            out[item.id] = sv;
+            break;
+          case 'MULTIPLE_CHOICE':
+            var h = document.getElementById(domIdFieldHidden(item.id));
+            var hv = h ? String(h.value) : '';
+            if (hv && item.choices && item.choices.indexOf(hv) === -1) {
+              hv = '';
+              if (h) h.value = '';
+            }
+            out[item.id] = hv;
+            break;
+          case 'CHECKBOX':
+            var cbs = document.querySelectorAll('input[name="q_' + item.id + '"]:checked');
+            var arr = [];
+            for (var j = 0; j < cbs.length; j++) arr.push(cbs[j].value);
+            out[item.id] = arr;
+            break;
+          case 'GRID':
+            var grow = [];
+            for (var r = 0; r < item.gridRows.length; r++) {
+              var sel = document.querySelector('input[name="grid_' + item.id + '_' + r + '"]:checked');
+              grow.push(sel ? sel.value : '');
+            }
+            out[item.id] = grow;
+            break;
+          case 'CHECKBOX_GRID':
+            var cg = [];
+            for (var r2 = 0; r2 < item.gridRows.length; r2++) {
+              var ck = document.querySelectorAll('input[name="gridcb_' + item.id + '_' + r2 + '"]:checked');
+              var row = [];
+              for (var k = 0; k < ck.length; k++) row.push(ck[k].value);
+              cg.push(row);
+            }
+            out[item.id] = cg;
+            break;
+        }
+      }
+      return out;
+    }
+
+    /**
+     * 送信 payload 用: formDef にある設問 ID のみを含め、余計なキー（将来のバグや拡張で混入したメタデータ）を落とす。
+     */
+    function answersPayloadForSubmit_(formDef) {
+      var raw = readAnswersFromDom(formDef);
+      var out = {};
+      for (var i = 0; i < formDef.items.length; i++) {
+        var item = formDef.items[i];
+        if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        var v = raw[item.id];
+        if (v === undefined) v = raw[String(item.id)];
+        out[item.id] = v;
+      }
+      return out;
+    }
+
+    function resetSubmitButtonsUi() {
+      state.submitting = false;
+      var allb = document.querySelectorAll('.form-section .button-group button');
+      for (var i = 0; i < allb.length; i++) {
+        allb[i].disabled = false;
+      }
+      var sb = document.getElementById('submit-button');
+      if (sb) {
+        sb.textContent = '送信する';
+      }
+      var nextBtns = document.querySelectorAll('button.page-next');
+      for (var j = 0; j < nextBtns.length; j++) {
+        if (nextBtns[j].textContent === '送信中...') nextBtns[j].textContent = '次へ';
+      }
+    }
+
+    function runSubmitFlow() {
+      if (state.submitting) return;
+
+      var answers = answersPayloadForSubmit_(state.formDef);
+      state.answers = answers;
+
+      var fa = document.getElementById('form-alerts');
+      if (fa) fa.innerHTML = '';
+
+      state.submitting = true;
+      var navBtns = document.querySelectorAll('.form-section .button-group button');
+      for (var nb = 0; nb < navBtns.length; nb++) navBtns[nb].disabled = true;
+      var btn = document.getElementById('submit-button');
+      var activeNext = document.querySelector('.form-section.active button.page-next');
+      if (btn) {
+        btn.innerHTML = '<span class="spinner"></span>送信中...';
+      } else if (activeNext) {
+        activeNext.textContent = '送信中...';
+      }
 
       var payload = {
         answers: state.answers,
+        visitedSections: visitedSectionsArrayFromState(),
         formRevisionHash: state.formDef.formRevisionHash,
         webAppVersion: state.formDef.webAppVersion,
         submissionId: state.submissionId
@@ -303,63 +1023,50 @@
     }
 
     function onSubmitSuccess(result) {
-      state.submitting = false;
+      resetSubmitButtonsUi();
+
       var area = document.getElementById('result-area');
       document.getElementById('form-area').style.display = 'none';
-      area.style.display = 'block';
 
       if (result.success) {
-        // 送信成功 → 下書きを削除
         Draft_clear();
+        area.style.display = 'block';
         area.innerHTML =
-          '<div class="card"><div class="msg-success">&#10003; ' + escapeHtml(result.message) + '</div>'
-          + '<div class="submission-id">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
+          '<div class="result-wrap"><div class="result-success">&#10003; ' +
+          escapeHtml(result.message) + '</div>' +
+          '<div class="submission-id-meta">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
       } else if (result.received) {
-        // 受付済みだがSubmit失敗 → 下書きは削除（Op Logに記録済み）
         Draft_clear();
+        area.style.display = 'block';
         area.innerHTML =
-          '<div class="card"><div class="msg-received">' + escapeHtml(result.message) + '</div>'
-          + '<div class="submission-id">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
+          '<div class="result-wrap"><div class="result-received">' + escapeHtml(result.message) + '</div>' +
+          '<div class="submission-id-meta">送信ID: ' + escapeHtml(result.submissionId) + '</div></div>';
       } else {
-        // バリデーションエラー等 → 再入力（下書きは保持）
         document.getElementById('form-area').style.display = 'block';
         area.style.display = 'none';
+        if (result.error && String(result.error).indexOf('REQUIRED_MISSING:') === 0) {
+          var fid = String(result.error).split(':')[1];
+          var numId = parseInt(fid, 10);
+          if (!isNaN(numId)) {
+            showFieldError(numId, '入力または選択してください。');
+            var sec = state.itemSection[numId];
+            if (sec) showSection(sec);
+          }
+        }
         showRetryMessage(result.message);
       }
     }
 
     function onSubmitError(error) {
-      // ネットワークエラー・ロックタイムアウト等 → 再試行（下書きは保持）
-      state.submitting = false;
-      var btn = document.getElementById('submit-btn');
-      btn.disabled = false;
-      btn.innerHTML = '送信';
+      resetSubmitButtonsUi();
       showRetryMessage('通信エラーが発生しました。再試行してください。');
     }
 
     function showRetryMessage(message) {
-      var existing = document.getElementById('retry-msg');
-      if (existing) existing.remove();
-      var footer = document.querySelector('.footer');
-      var div = document.createElement('div');
-      div.id = 'retry-msg';
-      div.className = 'msg-error';
-      div.style.marginBottom = '12px';
-      div.textContent = message;
-      footer.insertBefore(div, footer.firstChild);
+      var box = document.getElementById('form-alerts');
+      if (box) box.innerHTML = '<div class="alert-error" id="retry-msg">' + escapeHtml(message) + '</div>';
     }
 
-    // =========================================================================
-    // ユーティリティ
-    // =========================================================================
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    // =========================================================================
-    // 起動
-    // =========================================================================
     init();
   </script>
 </body>
