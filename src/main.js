@@ -76,6 +76,9 @@ function isAdmin_() {
  * @returns {GoogleAppsScript.HTML.HtmlOutput}
  */
 function doGet(e) {
+  // HtmlService では HTML 内の <meta name="viewport"> が無視されるため、必ず addMetaTag で注入する
+  var viewportContent = 'width=device-width, initial-scale=1, viewport-fit=cover';
+
   var page = (e && e.parameter && e.parameter.page) || 'index';
 
   if (page === 'admin') {
@@ -84,12 +87,15 @@ function doGet(e) {
       return HtmlService.createHtmlOutput(
         '<html><body><h2>アクセス権限がありません</h2>'
         + '<p>この画面は管理者のみ利用できます。</p></body></html>'
-      ).setTitle('アクセス拒否');
+      )
+        .setTitle('アクセス拒否')
+        .addMetaTag('viewport', viewportContent);
     }
 
     return HtmlService.createTemplateFromFile('html/admin')
       .evaluate()
-      .setTitle('院内アンケート — 管理画面');
+      .setTitle('院内アンケート — 管理画面')
+      .addMetaTag('viewport', viewportContent);
   }
 
   var indexPageTitle = 'アンケート';
@@ -103,7 +109,8 @@ function doGet(e) {
 
   return HtmlService.createTemplateFromFile('html/index')
     .evaluate()
-    .setTitle(indexPageTitle);
+    .setTitle(indexPageTitle)
+    .addMetaTag('viewport', viewportContent);
 }
 
 /**
