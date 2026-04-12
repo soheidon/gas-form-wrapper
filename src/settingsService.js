@@ -58,7 +58,7 @@ function SettingsService_checkIdShape_(id, userLabel) {
  * @returns {{ formId: string, oplogSheetId: string }}
  */
 function SettingsService_getSettings() {
-  assertAdmin_();
+  assertSetupApiAccess_();
   var props = PropertiesService.getScriptProperties();
   return {
     formId: props.getProperty(CONFIG_KEYS.FORM_ID) || '',
@@ -72,7 +72,7 @@ function SettingsService_getSettings() {
  * @returns {{ url: string }|{ error: string, recovery: string }}
  */
 function SettingsService_buildWrapperUrl() {
-  assertAdmin_();
+  assertSetupApiAccess_();
   try {
     var service = ScriptApp.getService();
     if (!service) {
@@ -113,7 +113,7 @@ function SettingsService_buildWrapperUrl() {
  * }}
  */
 function SettingsService_saveSettings(data) {
-  assertAdmin_();
+  assertSetupApiAccess_();
   data = data || {};
   var formId = SettingsService_extractResourceId_(data.formId, 'form');
   var sheetId = SettingsService_extractResourceId_(data.oplogSheetId, 'sheet');
@@ -174,8 +174,29 @@ function SettingsService_saveSettings(data) {
 
   try {
     var props = PropertiesService.getScriptProperties();
-    props.setProperty(CONFIG_KEYS.FORM_ID, formId);
-    props.setProperty(CONFIG_KEYS.OPLOG_SHEET_ID, sheetId);
+
+    if (isBootstrapAdmin_()) {
+      var ownerEmail = '';
+      try {
+        ownerEmail = Session.getActiveUser().getEmail();
+      } catch (eOwner) {
+        // ignore
+      }
+      if (!ownerEmail) {
+        return {
+          success: false,
+          message: '設定を保存できませんでした。',
+          recovery: '組織アカウントでログインしてから、もう一度このページを開き直してください。'
+        };
+      }
+      props.setProperty(CONFIG_KEYS.ADMIN_EMAILS, ownerEmail);
+      props.setProperty(CONFIG_KEYS.FORM_ID, formId);
+      props.setProperty(CONFIG_KEYS.OPLOG_SHEET_ID, sheetId);
+    } else {
+      assertAdmin_();
+      props.setProperty(CONFIG_KEYS.FORM_ID, formId);
+      props.setProperty(CONFIG_KEYS.OPLOG_SHEET_ID, sheetId);
+    }
   } catch (eSave) {
     console.log('SettingsService_saveSettings props: ' + eSave.message);
     return {

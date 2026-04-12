@@ -60,13 +60,36 @@ function isAdmin_() {
   }
 }
 
+/**
+ * ADMIN_EMAILS が未設定または空なら「初回（ブートストラップ）」とみなす。
+ *
+ * @returns {boolean}
+ * @private
+ */
+function isBootstrapAdmin_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(CONFIG_KEYS.ADMIN_EMAILS);
+  if (raw === null || raw === undefined) return true;
+  return String(raw).trim() === '';
+}
+
+/**
+ * setup 系 API 用: 初回は誰でも可、それ以外は管理者のみ。
+ *
+ * @throws {Error} 管理者でない場合（非初回）
+ * @private
+ */
+function assertSetupApiAccess_() {
+  if (isBootstrapAdmin_()) return;
+  assertAdmin_();
+}
+
 // =========================================================================
 // WebApp ハンドラ
 // =========================================================================
 
 /**
  * WebApp GET ハンドラ。
- * §3.1: 回答画面を配信する。初期設定は ?page=setup、管理者画面は ?page=admin。
+ * §3.1: 回答画面を配信する。初期設定は ?page=setup（初回は通常URLでも setup）、管理者画面は ?page=admin。
  *
  * 管理者画面はページ配信時点で権限チェックし、非管理者にはエラーを返す。
  * XFrameOptionsMode はデフォルト（SAMEORIGIN相当）を使用し、
@@ -80,6 +103,16 @@ function doGet(e) {
   var viewportContent = 'width=device-width, initial-scale=1, viewport-fit=cover';
 
   var page = (e && e.parameter && e.parameter.page) || 'index';
+
+  // 初回: ADMIN_EMAILS 未設定時は setup を誰でも表示（組織内アクセス前提）
+  if (isBootstrapAdmin_()) {
+    if (page === 'setup' || page === 'index') {
+      return HtmlService.createTemplateFromFile('html/setup')
+        .evaluate()
+        .setTitle('初期設定')
+        .addMetaTag('viewport', viewportContent);
+    }
+  }
 
   if (page === 'setup') {
     if (!isAdmin_()) {
@@ -343,7 +376,7 @@ function submitAnswer(payload) {
 }
 
 // =========================================================================
-// 初期設定（setup.html）向け google.script.run API（すべて assertAdmin_() 必須）
+// 初期設定（setup.html）向け google.script.run API（初回は assertSetupApiAccess_ で解放）
 // =========================================================================
 
 /**
@@ -351,7 +384,7 @@ function submitAnswer(payload) {
  * @returns {{ formId: string, oplogSheetId: string }}
  */
 function getSettings() {
-  assertAdmin_();
+  assertSetupApiAccess_();
   return SettingsService_getSettings();
 }
 
@@ -361,7 +394,7 @@ function getSettings() {
  * @returns {object}
  */
 function saveSettings(data) {
-  assertAdmin_();
+  assertSetupApiAccess_();
   return SettingsService_saveSettings(data);
 }
 
@@ -370,7 +403,7 @@ function saveSettings(data) {
  * @returns {{ success: boolean, wrapperUrl?: string, message?: string, recovery?: string }}
  */
 function buildWrapperUrl() {
-  assertAdmin_();
+  assertSetupApiAccess_();
   var r = SettingsService_buildWrapperUrl();
   if (r.url) {
     return { success: true, wrapperUrl: r.url };

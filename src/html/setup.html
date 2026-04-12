@@ -12,10 +12,26 @@
 </head>
 <body>
   <div class="container setup-page">
+    <section class="setup-prep" aria-labelledby="prep-heading">
+      <h2 id="prep-heading" class="setup-subheading setup-subheading--lead">
+        初期設定の前に準備しておくもの
+      </h2>
+      <div class="setup-prose-block">
+        <p class="setup-prose">
+          <span class="setup-prose-label">Googleフォーム</span>
+          質問項目や回答形式を含めて、あらかじめ完成させておいてください。
+        </p>
+        <p class="setup-prose">
+          <span class="setup-prose-label">回答を確認するための Google スプレッドシート</span>
+          回答内容やログを確認するために使います。事前に作成しておいてください。
+        </p>
+      </div>
+    </section>
+
     <header class="setup-header">
       <h1 class="setup-title">初期設定</h1>
       <p class="setup-lead">
-        GoogleフォームIDと保存先の情報を入力すると、回答者向けのURLを発行できます。
+        フォームとスプレッドシートのURLを貼り付けて保存すると、回答者に送る用のURLが表示されます。
       </p>
     </header>
 
@@ -24,43 +40,55 @@
 
       <div class="setup-field-block">
         <label class="setup-label" for="setup-form-id">
-          GoogleフォームID<span class="required-mark" aria-hidden="true">（必須）</span>
+          GoogleフォームのURL<span class="required-mark" aria-hidden="true">（必須）</span>
         </label>
         <input
-          type="text"
+          type="url"
+          inputmode="url"
           id="setup-form-id"
           name="formId"
           class="setup-input"
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="例：URLをそのまま貼り付けても構いません"
+          placeholder="https:// で始まるURLをそのまま貼り付け"
           aria-describedby="hint-form-id"
         />
         <p id="hint-form-id" class="setup-hint">
-          GoogleフォームのURLに含まれる長い文字列を入力します。
+          使いたいGoogleフォームを開き、そのURLをそのまま貼り付けてください。
         </p>
       </div>
 
       <div class="setup-field-block">
         <label class="setup-label" for="setup-sheet-id">
-          ログ保存先スプレッドシートID<span class="required-mark" aria-hidden="true">（必須）</span>
+          GoogleスプレッドシートのURL<span class="required-mark" aria-hidden="true">（必須）</span>
         </label>
         <input
-          type="text"
+          type="url"
+          inputmode="url"
           id="setup-sheet-id"
           name="oplogSheetId"
           class="setup-input"
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="例：URLをそのまま貼り付けても構いません"
+          placeholder="https:// で始まるURLをそのまま貼り付け"
           aria-describedby="hint-sheet-id"
         />
         <p id="hint-sheet-id" class="setup-hint">
-          回答ログを記録するスプレッドシートのIDを入力します。
+          回答の確認に使うGoogleスプレッドシートを開き、そのURLをそのまま貼り付けてください。
         </p>
       </div>
+
+      <section class="setup-admin-note" aria-labelledby="admin-heading">
+        <h2 id="admin-heading" class="setup-subheading setup-subheading--inline">
+          管理者について
+        </h2>
+        <p class="setup-prose setup-prose--compact">
+          最初に設定を保存したGoogleアカウントが、以後の管理者として登録されます。
+          このツールを今後運用するご本人のアカウントで初期設定を行ってください。
+        </p>
+      </section>
 
       <div class="setup-actions">
         <button type="button" id="btn-save" class="btn-setup-primary">設定を保存する</button>
