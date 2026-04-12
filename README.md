@@ -8,7 +8,7 @@ Google Workspace 組織内の Web アプリとして動かし、**既存の Goog
 
 - **[docs/webapp-deploy-for-beginners.md](docs/webapp-deploy-for-beginners.md)** — 編集画面からのデプロイ（一般向け・画面の流れ・つまずき・公式ヘルプへのリンク）
 - **[ウェブアプリとしてデプロイする（Google 公式・日本語）](https://developers.google.com/apps-script/guides/web?hl=ja)** — Apps Script の公式ガイド
-- **[docs/deployment-and-initial-setup.md](docs/deployment-and-initial-setup.md)** — clasp やスクリプトプロパティなど、**運用・技術担当向け**の手順
+
 
 ### 1. 公開までの流れ（イメージ）
 
@@ -55,7 +55,7 @@ Google Workspace 組織内の Web アプリとして動かし、**既存の Goog
 
 ## 運用・技術担当向け（詳細手順）
 
-clasp やスクリプトプロパティ、管理画面（`?page=admin`）などの詳細は **[docs/deployment-and-initial-setup.md](docs/deployment-and-initial-setup.md)** を参照してください（**GASのデプロイ**の節先頭にも同じドキュメントへのリンクがあります）。
+clasp やスクリプトプロパティ、管理画面（`?page=admin`）などの詳細は **[docs/deployment-and-initial-setup.md](docs/deployment-and-initial-setup.md)** を参照してください
 
 ## 仕様の詳細
 
