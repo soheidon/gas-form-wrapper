@@ -1,5 +1,8 @@
 node_modules/
 .clasp.json
+
+# ローカル用 UI/UX 設計メモ（共有しない）
+.cursor/rules/DESIGN.md
 *:Zone.Identifier
 tmp-preview-survey-ui.html
 tmp-screenshots/

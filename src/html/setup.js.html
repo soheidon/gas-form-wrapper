@@ -1,0 +1,232 @@
+<script>
+(function () {
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function clearNode(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function renderFeedback(kind, mainText, subText) {
+    var area = byId('feedback-area');
+    if (!area) return;
+    clearNode(area);
+    var box = document.createElement('div');
+    box.className =
+      kind === 'success' ? 'msg-setup msg-setup--success' : 'msg-setup msg-setup--error';
+    box.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+
+    var p1 = document.createElement('p');
+    p1.className = 'msg-setup__main';
+    p1.textContent = mainText || '';
+    box.appendChild(p1);
+
+    if (subText) {
+      var p2 = document.createElement('p');
+      p2.className = 'msg-setup__sub';
+      p2.textContent = subText;
+      box.appendChild(p2);
+    }
+
+    area.appendChild(box);
+  }
+
+  function clearFeedback() {
+    var area = byId('feedback-area');
+    if (!area) return;
+    clearNode(area);
+  }
+
+  function setUrlSectionVisible(visible) {
+    var sec = byId('url-section');
+    if (!sec) return;
+    if (visible) {
+      sec.removeAttribute('hidden');
+    } else {
+      sec.setAttribute('hidden', 'hidden');
+    }
+  }
+
+  function setWrapperUrl(url) {
+    var input = byId('setup-wrapper-url');
+    if (!input) return;
+    input.value = url || '';
+  }
+
+  function setBusy(isBusy) {
+    var btn = byId('btn-save');
+    if (!btn) return;
+    btn.disabled = !!isBusy;
+    btn.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+    btn.textContent = isBusy ? '保存しています...' : '設定を保存する';
+  }
+
+  function handleAuthError() {
+    document.body.innerHTML =
+      '<div class="container setup-page">'
+      + '<div class="msg-setup msg-setup--error" role="alert">'
+      + '<p class="msg-setup__main">アクセス権限がありません</p>'
+      + '<p class="msg-setup__sub">管理者としてログインし直してから、もう一度この画面を開いてください。</p>'
+      + '</div></div>';
+  }
+
+  function isAdminAuthFailure(err) {
+    var msg = (err && err.message) ? String(err.message) : '';
+    return msg.indexOf('ADMIN_AUTH_FAILED') !== -1;
+  }
+
+  function loadSettings() {
+    google.script.run
+      .withSuccessHandler(function (data) {
+        if (!data) return;
+        if (data.formId) byId('setup-form-id').value = data.formId;
+        if (data.oplogSheetId) byId('setup-sheet-id').value = data.oplogSheetId;
+      })
+      .withFailureHandler(function (err) {
+        if (isAdminAuthFailure(err)) {
+          handleAuthError();
+        }
+      })
+      .getSettings();
+  }
+
+  function tryFillWrapperUrlFallback() {
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success && res.wrapperUrl) {
+          setWrapperUrl(res.wrapperUrl);
+        }
+      })
+      .withFailureHandler(function () {})
+      .buildWrapperUrl();
+  }
+
+  function applySaveResult(result) {
+    if (!result || !result.success) {
+      var sub = (result && result.recovery) ? result.recovery : '';
+      renderFeedback(
+        'error',
+        (result && result.message) ? result.message : '設定を保存できませんでした。',
+        sub
+      );
+      setUrlSectionVisible(false);
+      setWrapperUrl('');
+      return;
+    }
+
+    clearFeedback();
+    var extra = '';
+    if (result.urlRecovery) {
+      extra = result.urlRecovery;
+    }
+    renderFeedback('success', result.message || '設定を保存しました。', extra);
+    if (result.nextSteps) {
+      var area = byId('feedback-area');
+      if (area && area.lastChild) {
+        var p3 = document.createElement('p');
+        p3.className = 'msg-setup__sub msg-setup__sub--next';
+        p3.textContent = result.nextSteps;
+        area.lastChild.appendChild(p3);
+      }
+    }
+
+    if (result.wrapperUrl) {
+      setWrapperUrl(result.wrapperUrl);
+      setUrlSectionVisible(true);
+    } else {
+      setUrlSectionVisible(true);
+      setWrapperUrl('');
+      tryFillWrapperUrlFallback();
+    }
+  }
+
+  function onSave() {
+    if (byId('btn-save').disabled) return;
+
+    clearFeedback();
+    setUrlSectionVisible(false);
+    setWrapperUrl('');
+    byId('copy-status').textContent = '';
+
+    var formId = byId('setup-form-id').value;
+    var sheetId = byId('setup-sheet-id').value;
+
+    if (!String(formId).trim() || !String(sheetId).trim()) {
+      renderFeedback(
+        'error',
+        '必須の入力が足りません。',
+        '両方の欄に入力してから、「設定を保存する」を押してください。'
+      );
+      return;
+    }
+
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        setBusy(false);
+        applySaveResult(res);
+      })
+      .withFailureHandler(function (err) {
+        setBusy(false);
+        if (isAdminAuthFailure(err)) {
+          handleAuthError();
+          return;
+        }
+        renderFeedback(
+          'error',
+          '保存中に問題が発生しました。',
+          '通信状態を確認して、もう一度お試しください。'
+        );
+      })
+      .saveSettings({ formId: formId, oplogSheetId: sheetId });
+  }
+
+  function onCopy() {
+    var input = byId('setup-wrapper-url');
+    var status = byId('copy-status');
+    if (!input || !status) return;
+
+    var text = String(input.value || '').trim();
+    if (!text) {
+      status.textContent =
+        'コピーできるURLがありません。いま開いている画面のURLから「?」以降を削除して使うこともできます。';
+      return;
+    }
+
+    function done(ok) {
+      status.textContent = ok
+        ? 'コピーしました。回答者に貼り付けて送ってください。'
+        : 'コピーできませんでした。URLを長押し（または右クリック）して選択し、コピーしてください。';
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        done(true);
+      }).catch(function () {
+        legacyCopy(text, done);
+      });
+    } else {
+      legacyCopy(text, done);
+    }
+  }
+
+  function legacyCopy(text, cb) {
+    try {
+      var input = byId('setup-wrapper-url');
+      input.focus();
+      input.select();
+      var ok = document.execCommand && document.execCommand('copy');
+      cb(!!ok);
+    } catch (e) {
+      cb(false);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    byId('btn-save').addEventListener('click', onSave);
+    byId('btn-copy-url').addEventListener('click', onCopy);
+    loadSettings();
+  });
+})();
+</script>

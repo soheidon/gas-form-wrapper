@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>初期設定</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+  <?!= HtmlService.createHtmlOutputFromFile('html/styles.css').getContent(); ?>
+</head>
+<body>
+  <div class="container setup-page">
+    <header class="setup-header">
+      <h1 class="setup-title">初期設定</h1>
+      <p class="setup-lead">
+        GoogleフォームIDと保存先の情報を入力すると、回答者向けのURLを発行できます。
+      </p>
+    </header>
+
+    <section class="setup-section" aria-labelledby="section-inputs-heading">
+      <h2 id="section-inputs-heading" class="visually-hidden">入力</h2>
+
+      <div class="setup-field-block">
+        <label class="setup-label" for="setup-form-id">
+          GoogleフォームID<span class="required-mark" aria-hidden="true">（必須）</span>
+        </label>
+        <input
+          type="text"
+          id="setup-form-id"
+          name="formId"
+          class="setup-input"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="例：URLをそのまま貼り付けても構いません"
+          aria-describedby="hint-form-id"
+        />
+        <p id="hint-form-id" class="setup-hint">
+          GoogleフォームのURLに含まれる長い文字列を入力します。
+        </p>
+      </div>
+
+      <div class="setup-field-block">
+        <label class="setup-label" for="setup-sheet-id">
+          ログ保存先スプレッドシートID<span class="required-mark" aria-hidden="true">（必須）</span>
+        </label>
+        <input
+          type="text"
+          id="setup-sheet-id"
+          name="oplogSheetId"
+          class="setup-input"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="例：URLをそのまま貼り付けても構いません"
+          aria-describedby="hint-sheet-id"
+        />
+        <p id="hint-sheet-id" class="setup-hint">
+          回答ログを記録するスプレッドシートのIDを入力します。
+        </p>
+      </div>
+
+      <div class="setup-actions">
+        <button type="button" id="btn-save" class="btn-setup-primary">設定を保存する</button>
+      </div>
+    </section>
+
+    <div id="feedback-area" class="setup-feedback" role="region" aria-live="polite" aria-atomic="true"></div>
+
+    <section
+      id="url-section"
+      class="setup-section setup-url-section"
+      hidden
+      aria-labelledby="url-section-heading"
+    >
+      <h2 id="url-section-heading" class="setup-subheading">回答用のURL</h2>
+      <p class="setup-hint setup-hint--tight">
+        このURLを回答者に送ってください。この画面のアドレス（初期設定）ではありません。
+      </p>
+      <div class="setup-url-row">
+        <input
+          type="text"
+          id="setup-wrapper-url"
+          class="setup-input setup-input-readonly"
+          readonly
+          aria-label="回答用のURL"
+        />
+        <button type="button" id="btn-copy-url" class="btn-setup-secondary">URLをコピー</button>
+      </div>
+      <p id="copy-status" class="setup-copy-status" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <?!= HtmlService.createHtmlOutputFromFile('html/setup.js').getContent(); ?>
+</body>
+</html>

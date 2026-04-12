@@ -66,7 +66,7 @@ function isAdmin_() {
 
 /**
  * WebApp GET ハンドラ。
- * §3.1: 回答画面を配信する。管理者画面は ?page=admin で切り替え。
+ * §3.1: 回答画面を配信する。初期設定は ?page=setup、管理者画面は ?page=admin。
  *
  * 管理者画面はページ配信時点で権限チェックし、非管理者にはエラーを返す。
  * XFrameOptionsMode はデフォルト（SAMEORIGIN相当）を使用し、
@@ -80,6 +80,22 @@ function doGet(e) {
   var viewportContent = 'width=device-width, initial-scale=1, viewport-fit=cover';
 
   var page = (e && e.parameter && e.parameter.page) || 'index';
+
+  if (page === 'setup') {
+    if (!isAdmin_()) {
+      return HtmlService.createHtmlOutput(
+        '<html><body><h2>アクセス権限がありません</h2>'
+        + '<p>この画面は管理者のみ利用できます。</p></body></html>'
+      )
+        .setTitle('アクセス拒否')
+        .addMetaTag('viewport', viewportContent);
+    }
+
+    return HtmlService.createTemplateFromFile('html/setup')
+      .evaluate()
+      .setTitle('初期設定')
+      .addMetaTag('viewport', viewportContent);
+  }
 
   if (page === 'admin') {
     // 管理者チェック（ページ配信時点で弾く）
@@ -324,6 +340,46 @@ function getFormDefinition() {
  */
 function submitAnswer(payload) {
   return processSubmission_(payload);
+}
+
+// =========================================================================
+// 初期設定（setup.html）向け google.script.run API（すべて assertAdmin_() 必須）
+// =========================================================================
+
+/**
+ * 保存済みのフォーム・ログ先を返す（未設定は空文字）
+ * @returns {{ formId: string, oplogSheetId: string }}
+ */
+function getSettings() {
+  assertAdmin_();
+  return SettingsService_getSettings();
+}
+
+/**
+ * フォームとログ保存先を保存し、回答者向けURLを組み立てて返す
+ * @param {{ formId?: string, oplogSheetId?: string }} data
+ * @returns {object}
+ */
+function saveSettings(data) {
+  assertAdmin_();
+  return SettingsService_saveSettings(data);
+}
+
+/**
+ * 回答者向けURL（クエリなし）を返す
+ * @returns {{ success: boolean, wrapperUrl?: string, message?: string, recovery?: string }}
+ */
+function buildWrapperUrl() {
+  assertAdmin_();
+  var r = SettingsService_buildWrapperUrl();
+  if (r.url) {
+    return { success: true, wrapperUrl: r.url };
+  }
+  return {
+    success: false,
+    message: r.error,
+    recovery: r.recovery
+  };
 }
 
 // =========================================================================
