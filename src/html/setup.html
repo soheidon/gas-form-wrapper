@@ -5,42 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>初期設定</title>
   <link
-    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <?!= HtmlService.createHtmlOutputFromFile('html/styles.css').getContent(); ?>
 </head>
 <body>
   <div class="container setup-page">
+    <div class="setup-lang-bar" role="group" aria-labelledby="setup-lang-label">
+      <span id="setup-lang-label" class="setup-lang-bar-label" data-i18n="langGroupLabel">表示言語</span>
+      <div class="setup-lang-switch">
+        <button type="button" id="lang-ja" class="setup-lang-btn" aria-pressed="true" data-lang="ja">日本語</button>
+        <button type="button" id="lang-en" class="setup-lang-btn" aria-pressed="false" data-lang="en">English</button>
+      </div>
+    </div>
+
     <section class="setup-prep" aria-labelledby="prep-heading">
-      <h2 id="prep-heading" class="setup-subheading setup-subheading--lead">
-        初期設定の前に準備しておくもの
-      </h2>
+      <h2 id="prep-heading" class="setup-subheading setup-subheading--lead" data-i18n="prepHeading"></h2>
       <div class="setup-prose-block">
         <p class="setup-prose">
-          <span class="setup-prose-label">Googleフォーム</span>
-          質問項目や回答形式を含めて、あらかじめ完成させておいてください。
+          <span class="setup-prose-label" data-i18n="prepFormLabel"></span>
+          <span data-i18n="prepFormText"></span>
         </p>
         <p class="setup-prose">
-          <span class="setup-prose-label">回答を確認するための Google スプレッドシート</span>
-          回答内容やログを確認するために使います。事前に作成しておいてください。
+          <span class="setup-prose-label" data-i18n="prepSheetLabel"></span>
+          <span data-i18n="prepSheetText"></span>
         </p>
       </div>
     </section>
 
     <header class="setup-header">
-      <h1 class="setup-title">初期設定</h1>
-      <p class="setup-lead">
-        フォームとスプレッドシートのURLを貼り付けて保存すると、回答者に送る用のURLが表示されます。
-      </p>
+      <h1 class="setup-title" data-i18n="pageTitle"></h1>
+      <p class="setup-lead" data-i18n="pageLead"></p>
     </header>
 
     <section class="setup-section" aria-labelledby="section-inputs-heading">
-      <h2 id="section-inputs-heading" class="visually-hidden">入力</h2>
+      <h2 id="section-inputs-heading" class="visually-hidden" data-i18n="sectionInputsSr"></h2>
 
       <div class="setup-field-block">
         <label class="setup-label" for="setup-form-id">
-          GoogleフォームのURL<span class="required-mark" aria-hidden="true">（必須）</span>
+          <span data-i18n="labelFormUrl"></span><span class="required-mark" data-i18n="required" aria-hidden="true"></span>
         </label>
         <input
           type="url"
@@ -51,17 +55,16 @@
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="https:// で始まるURLをそのまま貼り付け"
+          data-i18n-placeholder="placeholderUrl"
+          placeholder=""
           aria-describedby="hint-form-id"
         />
-        <p id="hint-form-id" class="setup-hint">
-          使いたいGoogleフォームを開き、そのURLをそのまま貼り付けてください。
-        </p>
+        <p id="hint-form-id" class="setup-hint" data-i18n="hintForm"></p>
       </div>
 
       <div class="setup-field-block">
         <label class="setup-label" for="setup-sheet-id">
-          GoogleスプレッドシートのURL<span class="required-mark" aria-hidden="true">（必須）</span>
+          <span data-i18n="labelSheetUrl"></span><span class="required-mark" data-i18n="required" aria-hidden="true"></span>
         </label>
         <input
           type="url"
@@ -72,16 +75,15 @@
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="https:// で始まるURLをそのまま貼り付け"
+          data-i18n-placeholder="placeholderUrl"
+          placeholder=""
           aria-describedby="hint-sheet-id"
         />
-        <p id="hint-sheet-id" class="setup-hint">
-          回答の確認に使うGoogleスプレッドシートを開き、そのURLをそのまま貼り付けてください。
-        </p>
+        <p id="hint-sheet-id" class="setup-hint" data-i18n="hintSheet"></p>
       </div>
 
       <div class="setup-actions">
-        <button type="button" id="btn-save" class="btn-setup-primary">設定を保存する</button>
+        <button type="button" id="btn-save" class="btn-setup-primary" data-i18n="btnSave"></button>
       </div>
     </section>
 
@@ -93,19 +95,18 @@
       hidden
       aria-labelledby="url-section-heading"
     >
-      <h2 id="url-section-heading" class="setup-subheading">回答用のURL</h2>
-      <p class="setup-hint setup-hint--tight">
-        このURLを回答者に送ってください。この画面のアドレス（初期設定）ではありません。
-      </p>
+      <h2 id="url-section-heading" class="setup-subheading" data-i18n="urlSectionHeading"></h2>
+      <p class="setup-hint setup-hint--tight" data-i18n="urlSectionHint"></p>
       <div class="setup-url-row">
         <input
           type="text"
           id="setup-wrapper-url"
           class="setup-input setup-input-readonly"
           readonly
-          aria-label="回答用のURL"
+          data-i18n-aria-label="ariaRespondentUrl"
+          aria-label=""
         />
-        <button type="button" id="btn-copy-url" class="btn-setup-secondary">URLをコピー</button>
+        <button type="button" id="btn-copy-url" class="btn-setup-secondary" data-i18n="btnCopy"></button>
       </div>
       <p id="copy-status" class="setup-copy-status" role="status" aria-live="polite"></p>
     </section>

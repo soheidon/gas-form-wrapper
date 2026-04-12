@@ -1,7 +1,144 @@
 <script>
 (function () {
+  var LANG_STORAGE_KEY = 'gas_setup_ui_lang';
+
+  var STRINGS = {
+    ja: {
+      docTitle: '初期設定',
+      langGroupLabel: '表示言語',
+      prepHeading: '初期設定の前に準備しておくもの',
+      prepFormLabel: 'Googleフォーム',
+      prepFormText: '質問項目や回答形式を含めて、あらかじめ完成させておいてください。',
+      prepSheetLabel: '回答を確認するための Google スプレッドシート',
+      prepSheetText: '回答内容やログを確認するために使います。事前に作成しておいてください。',
+      pageTitle: '初期設定',
+      pageLead: 'フォームとスプレッドシートのURLを貼り付けて保存すると、回答者に送る用のURLが表示されます。',
+      sectionInputsSr: '入力',
+      labelFormUrl: 'GoogleフォームのURL',
+      required: '（必須）',
+      placeholderUrl: 'https:// で始まるURLをそのまま貼り付け',
+      hintForm: '使いたいGoogleフォームを開き、そのURLをそのまま貼り付けてください。',
+      labelSheetUrl: 'GoogleスプレッドシートのURL',
+      hintSheet: '回答の確認に使うGoogleスプレッドシートを開き、そのURLをそのまま貼り付けてください。',
+      btnSave: '設定を保存する',
+      btnSaveBusy: '保存しています...',
+      urlSectionHeading: '回答用のURL',
+      urlSectionHint: 'このURLを回答者に送ってください。この画面のアドレス（初期設定）ではありません。',
+      ariaRespondentUrl: '回答用のURL',
+      btnCopy: 'URLをコピー',
+      saveSuccessShort: '設定を保存しました。',
+      errSaveFailedGeneric: '設定を保存できませんでした。',
+      errRequiredFields: '必須の入力が足りません。',
+      errRequiredHint: '両方の欄に入力してから、「設定を保存する」を押してください。',
+      errSaveNetwork: '保存中に問題が発生しました。',
+      errSaveNetworkHint: '通信状態を確認して、もう一度お試しください。',
+      copyNoUrl: 'コピーできるURLがありません。いま開いている画面のURLから「?」以降を削除して使うこともできます。',
+      copyOk: 'コピーしました。回答者に貼り付けて送ってください。',
+      copyFail: 'コピーできませんでした。URLを長押し（または右クリック）して選択し、コピーしてください。',
+      authErrTitle: 'アクセス権限がありません',
+      authErrBody: '管理者としてログインし直してから、もう一度この画面を開いてください。'
+    },
+    en: {
+      docTitle: 'Initial setup',
+      langGroupLabel: 'Language',
+      prepHeading: 'Before you start',
+      prepFormLabel: 'Google Form',
+      prepFormText: 'Finish creating your form first, including all questions and how answers are collected.',
+      prepSheetLabel: 'Google Sheet for reviewing responses',
+      prepSheetText: 'Used to review responses and logs. Create this sheet beforehand.',
+      pageTitle: 'Initial setup',
+      pageLead: 'Paste your form and spreadsheet URLs and save. You will then see the URL to share with respondents.',
+      sectionInputsSr: 'Input',
+      labelFormUrl: 'Google Form URL',
+      required: '(required)',
+      placeholderUrl: 'Paste the full URL starting with https://',
+      hintForm: 'Open the form you want to use and paste the URL from the address bar.',
+      labelSheetUrl: 'Google Sheet URL',
+      hintSheet: 'Open the sheet you use to review responses and paste its URL from the address bar.',
+      btnSave: 'Save settings',
+      btnSaveBusy: 'Saving…',
+      urlSectionHeading: 'URL for respondents',
+      urlSectionHint: 'Share this URL with respondents. It is not the same as this setup page’s address.',
+      ariaRespondentUrl: 'URL for respondents',
+      btnCopy: 'Copy URL',
+      saveSuccessShort: 'Settings saved.',
+      errSaveFailedGeneric: 'Could not save settings.',
+      errRequiredFields: 'Please fill in both fields.',
+      errRequiredHint: 'Enter both URLs, then tap Save settings.',
+      errSaveNetwork: 'Something went wrong while saving.',
+      errSaveNetworkHint: 'Check your connection and try again.',
+      copyNoUrl: 'No URL to copy. You can copy this page’s address and remove everything from ? onward.',
+      copyOk: 'Copied. Share it with your respondents.',
+      copyFail: 'Could not copy. Long-press or right-click the URL to select and copy.',
+      authErrTitle: 'Access denied',
+      authErrBody: 'Sign in again as an authorized administrator, then open this page again.'
+    }
+  };
+
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function getLang() {
+    try {
+      var s = localStorage.getItem(LANG_STORAGE_KEY);
+      if (s === 'en' || s === 'ja') return s;
+    } catch (e) {}
+    return 'ja';
+  }
+
+  function setLang(lang) {
+    if (lang !== 'en' && lang !== 'ja') return;
+    try {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    } catch (e) {}
+    applyStaticI18n();
+    var btn = byId('btn-save');
+    if (btn && !btn.disabled) {
+      btn.textContent = t('btnSave');
+    }
+  }
+
+  function t(key) {
+    var lang = getLang();
+    var pack = STRINGS[lang] || STRINGS.ja;
+    return Object.prototype.hasOwnProperty.call(pack, key) ? pack[key] : (STRINGS.ja[key] || '');
+  }
+
+  function applyStaticI18n() {
+    var lang = getLang();
+    document.documentElement.lang = lang === 'en' ? 'en' : 'ja';
+    var root = document.querySelector('.setup-page');
+    if (root) {
+      root.classList.toggle('setup-page--en', lang === 'en');
+    }
+    document.title = t('docTitle');
+
+    var list = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      var key = el.getAttribute('data-i18n');
+      if (key) el.textContent = t(key);
+    }
+
+    var ph = document.querySelectorAll('[data-i18n-placeholder]');
+    for (var j = 0; j < ph.length; j++) {
+      var inp = ph[j];
+      var pk = inp.getAttribute('data-i18n-placeholder');
+      if (pk) inp.placeholder = t(pk);
+    }
+
+    var ar = document.querySelectorAll('[data-i18n-aria-label]');
+    for (var k = 0; k < ar.length; k++) {
+      var inp2 = ar[k];
+      var ak = inp2.getAttribute('data-i18n-aria-label');
+      if (ak) inp2.setAttribute('aria-label', t(ak));
+    }
+
+    var jaBtn = byId('lang-ja');
+    var enBtn = byId('lang-en');
+    if (jaBtn) jaBtn.setAttribute('aria-pressed', lang === 'ja' ? 'true' : 'false');
+    if (enBtn) enBtn.setAttribute('aria-pressed', lang === 'en' ? 'true' : 'false');
   }
 
   function clearNode(el) {
@@ -59,16 +196,26 @@
     if (!btn) return;
     btn.disabled = !!isBusy;
     btn.setAttribute('aria-busy', isBusy ? 'true' : 'false');
-    btn.textContent = isBusy ? '保存しています...' : '設定を保存する';
+    btn.textContent = isBusy ? t('btnSaveBusy') : t('btnSave');
   }
 
   function handleAuthError() {
+    var title = t('authErrTitle');
+    var body = t('authErrBody');
     document.body.innerHTML =
       '<div class="container setup-page">'
       + '<div class="msg-setup msg-setup--error" role="alert">'
-      + '<p class="msg-setup__main">アクセス権限がありません</p>'
-      + '<p class="msg-setup__sub">管理者としてログインし直してから、もう一度この画面を開いてください。</p>'
+      + '<p class="msg-setup__main">' + escapeHtml_(title) + '</p>'
+      + '<p class="msg-setup__sub">' + escapeHtml_(body) + '</p>'
       + '</div></div>';
+  }
+
+  function escapeHtml_(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function isAdminAuthFailure(err) {
@@ -107,7 +254,7 @@
       var sub = (result && result.recovery) ? result.recovery : '';
       renderFeedback(
         'error',
-        (result && result.message) ? result.message : '設定を保存できませんでした。',
+        (result && result.message) ? result.message : t('errSaveFailedGeneric'),
         sub
       );
       setUrlSectionVisible(false);
@@ -120,7 +267,7 @@
     if (result.urlRecovery) {
       extra = result.urlRecovery;
     }
-    renderFeedback('success', result.message || '設定を保存しました。', extra);
+    renderFeedback('success', result.message || t('saveSuccessShort'), extra);
     if (result.nextSteps) {
       var area = byId('feedback-area');
       if (area && area.lastChild) {
@@ -155,8 +302,8 @@
     if (!String(formId).trim() || !String(sheetId).trim()) {
       renderFeedback(
         'error',
-        '必須の入力が足りません。',
-        '両方の欄に入力してから、「設定を保存する」を押してください。'
+        t('errRequiredFields'),
+        t('errRequiredHint')
       );
       return;
     }
@@ -175,8 +322,8 @@
         }
         renderFeedback(
           'error',
-          '保存中に問題が発生しました。',
-          '通信状態を確認して、もう一度お試しください。'
+          t('errSaveNetwork'),
+          t('errSaveNetworkHint')
         );
       })
       .saveSettings({ formId: formId, oplogSheetId: sheetId });
@@ -189,15 +336,12 @@
 
     var text = String(input.value || '').trim();
     if (!text) {
-      status.textContent =
-        'コピーできるURLがありません。いま開いている画面のURLから「?」以降を削除して使うこともできます。';
+      status.textContent = t('copyNoUrl');
       return;
     }
 
     function done(ok) {
-      status.textContent = ok
-        ? 'コピーしました。回答者に貼り付けて送ってください。'
-        : 'コピーできませんでした。URLを長押し（または右クリック）して選択し、コピーしてください。';
+      status.textContent = ok ? t('copyOk') : t('copyFail');
     }
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -213,9 +357,9 @@
 
   function legacyCopy(text, cb) {
     try {
-      var input = byId('setup-wrapper-url');
-      input.focus();
-      input.select();
+      var inputEl = byId('setup-wrapper-url');
+      inputEl.focus();
+      inputEl.select();
       var ok = document.execCommand && document.execCommand('copy');
       cb(!!ok);
     } catch (e) {
@@ -224,6 +368,15 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    applyStaticI18n();
+
+    byId('lang-ja').addEventListener('click', function () {
+      setLang('ja');
+    });
+    byId('lang-en').addEventListener('click', function () {
+      setLang('en');
+    });
+
     byId('btn-save').addEventListener('click', onSave);
     byId('btn-copy-url').addEventListener('click', onCopy);
     loadSettings();

@@ -787,6 +787,70 @@
     max-width: 560px;
   }
 
+  .setup-page.setup-page--en {
+    font-family: "Noto Sans", "Noto Sans JP", sans-serif;
+  }
+
+  .setup-lang-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .setup-lang-bar-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #5f6368;
+  }
+
+  .setup-lang-switch {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .setup-lang-btn {
+    min-height: 44px;
+    min-width: 76px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    background: #fff;
+    color: var(--text-color);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .setup-lang-btn:hover {
+    background: #f8f9fa;
+  }
+
+  .setup-lang-btn[aria-pressed="true"] {
+    background: var(--secondary-color);
+    color: var(--primary-color);
+  }
+
+  .setup-lang-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+    z-index: 1;
+  }
+
+  .setup-lang-btn:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .setup-lang-btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
   .setup-prep {
     margin-bottom: 24px;
   }
