@@ -2,6 +2,8 @@
 
 Google Workspace 組織内の Web アプリとして本プロジェクトを動かすまでの手順です。開発環境の詳細（WSL、認証トラブルなど）は [development.md](development.md) を参照してください。
 
+**プログラムを書かず、ブラウザの Apps Script 画面だけで Web アプリを公開する**手順は、一般向けに **[webapp-deploy-for-beginners.md](webapp-deploy-for-beginners.md)** にまとめています（初回の承認ダイアログや「デプロイ」メニューの流れ）。
+
 ---
 
 ## 前提
@@ -123,5 +125,7 @@ Web アプリの URL に **`?page=admin`** を付けて開く。
 
 ## 関連ドキュメント
 
+- [webapp-deploy-for-beginners.md](webapp-deploy-for-beginners.md) — 編集画面から Web アプリを公開する手順（一般向け）
 - [spec.md](spec.md) — 機能・データフロー・セキュリティ
 - [development.md](development.md) — ローカル開発、clasp、トラブルシュート
+- [README.md](../README.md) — 使い始める人向け（初期設定画面の説明など）
