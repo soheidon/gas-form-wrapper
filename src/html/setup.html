@@ -109,9 +109,22 @@
         <button type="button" id="btn-copy-url" class="btn-setup-secondary" data-i18n="btnCopy"></button>
       </div>
       <p id="copy-status" class="setup-copy-status" role="status" aria-live="polite"></p>
+
+      <h3 id="qr-section-heading" class="setup-subheading setup-subheading--nest" data-i18n="qrSectionHeading"></h3>
+      <p class="setup-hint setup-hint--tight" data-i18n="qrSectionHint"></p>
+      <p class="setup-hint setup-hint--tight" data-i18n="qrTechHint"></p>
+      <div class="setup-qr-actions">
+        <button type="button" id="btn-qr-generate" class="btn-setup-secondary" data-i18n="btnQrGenerate"></button>
+      </div>
+      <p id="qr-status" class="setup-copy-status setup-copy-status--error" role="status" aria-live="polite"></p>
+      <div id="qr-wrap" class="setup-qr-wrap" hidden>
+        <div id="qr-host" class="setup-qr-host"></div>
+        <p class="setup-hint setup-hint--tight" data-i18n="qrDownloadHint"></p>
+      </div>
     </section>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <?!= HtmlService.createHtmlOutputFromFile('html/setup.js').getContent(); ?>
 </body>
 </html>

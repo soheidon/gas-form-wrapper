@@ -400,11 +400,12 @@ function saveSettings(data) {
 
 /**
  * 回答者向けURL（クエリなし）を返す
+ * @param {string} [uiLang] - 'en' でメッセージを英語化
  * @returns {{ success: boolean, wrapperUrl?: string, message?: string, recovery?: string }}
  */
-function buildWrapperUrl() {
+function buildWrapperUrl(uiLang) {
   assertSetupApiAccess_();
-  var r = SettingsService_buildWrapperUrl();
+  var r = SettingsService_buildWrapperUrl(uiLang);
   if (r.url) {
     return { success: true, wrapperUrl: r.url };
   }

@@ -35,6 +35,14 @@
       copyNoUrl: 'コピーできるURLがありません。いま開いている画面のURLから「?」以降を削除して使うこともできます。',
       copyOk: 'コピーしました。回答者に貼り付けて送ってください。',
       copyFail: 'コピーできませんでした。URLを長押し（または右クリック）して選択し、コピーしてください。',
+      qrSectionHeading: 'QRコード',
+      qrSectionHint: '上に表示されている回答用URL（短縮していないURL）のQRコードを表示します。',
+      qrTechHint: 'QRコードはこのブラウザ内だけで描画されます。外部サービスにURLを送りません。',
+      btnQrGenerate: 'QRコードを表示',
+      qrNoLongUrl: '回答用のURLが表示されていません。',
+      qrGenerateFailed: 'QRコードの生成に失敗しました。',
+      qrDownloadHint: '画像を長押し（または右クリック）して保存できます。',
+      qrLibMissing: 'QRコード用のライブラリを読み込めませんでした。ページを再読み込みしてください。',
       authErrTitle: 'アクセス権限がありません',
       authErrBody: '管理者としてログインし直してから、もう一度この画面を開いてください。'
     },
@@ -70,6 +78,14 @@
       copyNoUrl: 'No URL to copy. You can copy this page’s address and remove everything from ? onward.',
       copyOk: 'Copied. Share it with your respondents.',
       copyFail: 'Could not copy. Long-press or right-click the URL to select and copy.',
+      qrSectionHeading: 'QR code',
+      qrSectionHint: 'Generates a QR code for the respondent URL shown above (the full URL, not shortened).',
+      qrTechHint: 'The QR code is generated only in this browser. The URL is not sent to an external service.',
+      btnQrGenerate: 'Show QR code',
+      qrNoLongUrl: 'The respondent URL is not available yet.',
+      qrGenerateFailed: 'Could not generate the QR code.',
+      qrDownloadHint: 'Long-press or right-click the image to save it.',
+      qrLibMissing: 'Could not load the QR code library. Reload the page and try again.',
       authErrTitle: 'Access denied',
       authErrBody: 'Sign in again as an authorized administrator, then open this page again.'
     }
@@ -191,6 +207,52 @@
     input.value = url || '';
   }
 
+  function clearQrPreview() {
+    var host = byId('qr-host');
+    var wrap = byId('qr-wrap');
+    var qs = byId('qr-status');
+    if (host) host.innerHTML = '';
+    if (wrap) wrap.setAttribute('hidden', 'hidden');
+    if (qs) qs.textContent = '';
+  }
+
+  function onQrGenerate() {
+    var status = byId('qr-status');
+    var wrap = byId('qr-wrap');
+    var host = byId('qr-host');
+    if (status) status.textContent = '';
+    if (typeof QRCode === 'undefined') {
+      if (status) status.textContent = t('qrLibMissing');
+      return;
+    }
+    var lInp = byId('setup-wrapper-url');
+    var url = lInp ? String(lInp.value || '').trim() : '';
+    if (!url) {
+      if (status) status.textContent = t('qrNoLongUrl');
+      return;
+    }
+    if (!host) return;
+    try {
+      host.innerHTML = '';
+      var opts = {
+        text: url,
+        width: 220,
+        height: 220,
+        colorDark: '#202124',
+        colorLight: '#ffffff'
+      };
+      if (QRCode.CorrectLevel) {
+        opts.correctLevel = QRCode.CorrectLevel.M;
+      }
+      new QRCode(host, opts);
+      if (wrap) wrap.removeAttribute('hidden');
+    } catch (eGen) {
+      if (wrap) wrap.setAttribute('hidden', 'hidden');
+      host.innerHTML = '';
+      if (status) status.textContent = t('qrGenerateFailed');
+    }
+  }
+
   function setBusy(isBusy) {
     var btn = byId('btn-save');
     if (!btn) return;
@@ -246,7 +308,7 @@
         }
       })
       .withFailureHandler(function () {})
-      .buildWrapperUrl();
+      .buildWrapperUrl(getLang());
   }
 
   function applySaveResult(result) {
@@ -259,6 +321,7 @@
       );
       setUrlSectionVisible(false);
       setWrapperUrl('');
+      clearQrPreview();
       return;
     }
 
@@ -278,6 +341,7 @@
       }
     }
 
+    clearQrPreview();
     if (result.wrapperUrl) {
       setWrapperUrl(result.wrapperUrl);
       setUrlSectionVisible(true);
@@ -295,6 +359,7 @@
     setUrlSectionVisible(false);
     setWrapperUrl('');
     byId('copy-status').textContent = '';
+    clearQrPreview();
 
     var formId = byId('setup-form-id').value;
     var sheetId = byId('setup-sheet-id').value;
@@ -326,7 +391,7 @@
           t('errSaveNetworkHint')
         );
       })
-      .saveSettings({ formId: formId, oplogSheetId: sheetId });
+      .saveSettings({ formId: formId, oplogSheetId: sheetId, uiLang: getLang() });
   }
 
   function onCopy() {
@@ -379,6 +444,8 @@
 
     byId('btn-save').addEventListener('click', onSave);
     byId('btn-copy-url').addEventListener('click', onCopy);
+    var bQr = byId('btn-qr-generate');
+    if (bQr) bQr.addEventListener('click', onQrGenerate);
     loadSettings();
   });
 })();
