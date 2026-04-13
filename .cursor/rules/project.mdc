@@ -10,7 +10,7 @@ alwaysApply: true
 
 Google Workspace 組織内の Web アプリとして、Google フォームの設問定義を読み取り、カスタム UI で回答を受け付け、GAS 経由でフォームに送信する。
 
-詳細仕様: `docs/spec.md` を必ず参照すること。ローカル開発・clasp・Git の手順は `docs/development.md`。
+詳細仕様: `docs/spec.md` を必ず参照すること。ローカル開発・clasp・Git は `docs/deployment-and-initial-setup.md` および README の関連節を参照（個人用の詳細手順はリポジトリ外で管理）。
 
 ## 技術スタック
 
@@ -130,7 +130,7 @@ index.html では入力のたびに localStorage に下書きを保存する。
 
 ## 開発コマンド
 
-運用フロー・認証トラブルは `docs/development.md` を参照。
+運用フロー・認証トラブルは `docs/deployment-and-initial-setup.md` を参照。
 
 ```bash
 clasp push          # ローカル → GASへ反映

@@ -3,6 +3,9 @@ node_modules/
 
 # ローカル用 UI/UX 設計メモ（共有しない）
 .cursor/rules/DESIGN.md
+
+# ローカル開発手順（個人パス・環境を含むため共有しない）
+docs/development.md
 *:Zone.Identifier
 tmp-preview-survey-ui.html
 tmp-screenshots/
