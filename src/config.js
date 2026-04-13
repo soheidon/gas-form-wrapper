@@ -49,7 +49,9 @@ var CONFIG_KEYS = {
   ADMIN_EMAILS: 'ADMIN_EMAILS',
   RETRY_MAX: 'RETRY_MAX',
   STALE_THRESHOLD_MIN: 'STALE_THRESHOLD_MIN',
-  WEBAPP_VERSION: 'WEBAPP_VERSION'
+  WEBAPP_VERSION: 'WEBAPP_VERSION',
+  /** GPS 用短文設問の itemId（getFormDefinition 時にフォームから同期） */
+  GPS_ITEM_ID: 'GPS_ITEM_ID'
 };
 
 // --- デフォルト値 ---

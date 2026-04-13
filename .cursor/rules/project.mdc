@@ -105,6 +105,7 @@ src/
 | RETRY_MAX | 再送上限（デフォルト: 3） |
 | STALE_THRESHOLD_MIN | RECEIVED孤児判定の閾値分（デフォルト: 15） |
 | WEBAPP_VERSION | デプロイバージョン（ビルド日時等） |
+| GPS_ITEM_ID | タイトル `GPS`（互換: `__gps_latlng__`）の短文設問の itemId（getFormDefinition 時に同期） |
 
 ## 管理者認可（厳守）
 

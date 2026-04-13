@@ -5,6 +5,18 @@
  */
 
 /**
+ * GPS 用の短文設問タイトル（trim 後に完全一致）。旧名 __gps_latlng__ も互換のため許可する。
+ *
+ * @param {string} title
+ * @returns {boolean}
+ * @private
+ */
+function FormService_isGpsFieldTitle_(title) {
+  var t = String(title == null ? '' : title).trim();
+  return t === 'GPS' || t === '__gps_latlng__';
+}
+
+/**
  * h1 / ブラウザタブ用の表示タイトルのみ。本文のセクション・設問とは独立。
  * 1) Drive のファイル名（拡張子除く） 2) form.getTitle() 3) 固定「アンケート」
  *
@@ -87,7 +99,10 @@ function FormService_getFormDefinition() {
     }
   }
 
-  var hash = FormService_generateRevisionHash_(result);
+  FormService_syncGpsItemIdProperty_(result);
+  var gpsItemIdStr = FormService_getGpsItemIdFromParsedItems_(result);
+  var collectGps = gpsItemIdStr !== '';
+  var hash = FormService_generateRevisionHash_(result, gpsItemIdStr);
 
   var formDescription = '';
   var formTitle = '';
@@ -129,8 +144,49 @@ function FormService_getFormDefinition() {
     itemSectionByItemId: itemSectionByItemId,
     formRevisionHash: hash,
     publishedAt: new Date().toISOString(),
-    webAppVersion: Config_get(CONFIG_KEYS.WEBAPP_VERSION, CONFIG_DEFAULTS.WEBAPP_VERSION)
+    webAppVersion: Config_get(CONFIG_KEYS.WEBAPP_VERSION, CONFIG_DEFAULTS.WEBAPP_VERSION),
+    collectGps: collectGps
   };
+}
+
+/**
+ * パース済み設問のうち、先頭の GPS 用短文の itemId（無ければ空文字）
+ *
+ * @param {object[]} parsedItems
+ * @returns {string}
+ * @private
+ */
+function FormService_getGpsItemIdFromParsedItems_(parsedItems) {
+  for (var gi = 0; gi < parsedItems.length; gi++) {
+    var pit = parsedItems[gi];
+    if (pit.wrapperSkipRender && pit.type === 'TEXT') {
+      return String(pit.id);
+    }
+  }
+  return '';
+}
+
+/**
+ * GPS 用設問の itemId をスクリプトプロパティに同期する（無ければ削除）
+ *
+ * @param {object[]} parsedItems
+ * @private
+ */
+function FormService_syncGpsItemIdProperty_(parsedItems) {
+  var id = FormService_getGpsItemIdFromParsedItems_(parsedItems);
+  var props = PropertiesService.getScriptProperties();
+  var n = 0;
+  for (var ni = 0; ni < parsedItems.length; ni++) {
+    if (parsedItems[ni].wrapperSkipRender && parsedItems[ni].type === 'TEXT') n++;
+  }
+  if (id) {
+    props.setProperty(CONFIG_KEYS.GPS_ITEM_ID, id);
+    if (n > 1) {
+      console.log('FormService_syncGpsItemIdProperty_: 複数のGPS用設問があります。先頭 itemId=' + id + ' を使用します。');
+    }
+  } else {
+    props.deleteProperty(CONFIG_KEYS.GPS_ITEM_ID);
+  }
 }
 
 /**
@@ -223,6 +279,10 @@ function FormService_parseItem_(item) {
       return null;
   }
 
+  if (base.type === 'TEXT' && FormService_isGpsFieldTitle_(base.title)) {
+    base.wrapperSkipRender = true;
+  }
+
   return base;
 }
 
@@ -246,11 +306,13 @@ function FormService_extractChoices_(choices) {
  * title, helpText はhashに含めない（ラベル修正は互換変更）。
  *
  * @param {object[]} items - パース済みの設問配列
+ * @param {string} gpsItemId - GPS 用短文の itemId（無いときは空。追加・削除でクライアント再取得させる）
  * @returns {string} 32文字のhex文字列
  * @private
  */
-function FormService_generateRevisionHash_(items) {
+function FormService_generateRevisionHash_(items, gpsItemId) {
   var hashInput = JSON.stringify({
+    gpsItemId: gpsItemId || '',
     items: items.map(function(item) {
       var row = {
         id: item.id,

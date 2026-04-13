@@ -88,6 +88,10 @@ function Validation_validateItem_(item, answer) {
     return null;
   }
 
+  if (item.wrapperSkipRender) {
+    return null;
+  }
+
   var isEmpty = (answer === undefined || answer === null || answer === '');
   var isArrayEmpty = Array.isArray(answer) && answer.length === 0;
 

@@ -391,7 +391,11 @@
           t('errSaveNetworkHint')
         );
       })
-      .saveSettings({ formId: formId, oplogSheetId: sheetId, uiLang: getLang() });
+      .saveSettings({
+        formId: formId,
+        oplogSheetId: sheetId,
+        uiLang: getLang()
+      });
   }
 
   function onCopy() {

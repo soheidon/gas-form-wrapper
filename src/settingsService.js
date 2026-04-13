@@ -246,6 +246,12 @@ function SettingsService_saveSettings(data) {
     };
   }
 
+  try {
+    FormService_getFormDefinition();
+  } catch (eGpsSync) {
+    console.log('SettingsService_saveSettings: FormService_getFormDefinition after save: ' + eGpsSync.message);
+  }
+
   var urlResult = SettingsService_buildWrapperUrl(lang);
   var wrapperUrl = urlResult.url || '';
   var urlRecovery = urlResult.recovery || '';

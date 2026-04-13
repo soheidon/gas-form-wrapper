@@ -231,6 +231,57 @@ function Submission_itemSectionVisited_(visitedSections, sectionNum) {
   return false;
 }
 
+/**
+ * クライアントの answers からラッパー内部設問を除去し、フォームに GPS 用短文があるときだけ payload.gps をマージする。
+ * マージ先は formDef 上の GPS 設問（wrapperSkipRender の TEXT）のみ。古い GPS_ITEM_ID による列ずれを防ぐ。
+ *
+ * @param {object} payload
+ * @param {object} formDef
+ * @returns {object}
+ * @private
+ */
+function Submission_mergeAnswersWithGps_(payload, formDef) {
+  var src = payload.answers || {};
+  var answers = {};
+  var k;
+  for (k in src) {
+    if (Object.prototype.hasOwnProperty.call(src, k)) {
+      answers[k] = src[k];
+    }
+  }
+  var i;
+  for (i = 0; i < formDef.items.length; i++) {
+    var it = formDef.items[i];
+    if (it.wrapperSkipRender) {
+      delete answers[it.id];
+      delete answers[String(it.id)];
+    }
+  }
+  if (!formDef.collectGps) {
+    return answers;
+  }
+  var latlng =
+    payload.gps && typeof payload.gps.latlng === 'string' ? payload.gps.latlng : '';
+  if (!latlng) {
+    return answers;
+  }
+  var gpsItem = null;
+  for (var j = 0; j < formDef.items.length; j++) {
+    var git = formDef.items[j];
+    if (git.wrapperSkipRender && git.type === 'TEXT') {
+      gpsItem = git;
+      break;
+    }
+  }
+  if (!gpsItem) {
+    console.log('Submission_mergeAnswersWithGps_: collectGps だが formDef に GPS 用設問がありません');
+    return answers;
+  }
+  answers[gpsItem.id] = latlng;
+  answers[String(gpsItem.id)] = latlng;
+  return answers;
+}
+
 function sanitizeAnswersForForm_(answers, formDef, visitedSections) {
   var restrict = visitedSections && Array.isArray(visitedSections) && visitedSections.length > 0;
   var secMap = formDef.itemSectionByItemId || {};
@@ -273,7 +324,8 @@ function processSubmission_(payload) {
   // --- Step 2: サーバ側バリデーション (§3.3) ---
   var formDef = FormService_getFormDefinition();
   var visited = payload.visitedSections;
-  var answersSanitized = sanitizeAnswersForForm_(payload.answers || {}, formDef, visited);
+  var mergedAnswers = Submission_mergeAnswersWithGps_(payload, formDef);
+  var answersSanitized = sanitizeAnswersForForm_(mergedAnswers, formDef, visited);
   payload = {
     answers: answersSanitized,
     visitedSections: visited,
@@ -390,7 +442,7 @@ function getSettings() {
 
 /**
  * フォームとログ保存先を保存し、回答者向けURLを組み立てて返す
- * @param {{ formId?: string, oplogSheetId?: string }} data
+ * @param {{ formId?: string, oplogSheetId?: string, uiLang?: string }} data
  * @returns {object}
  */
 function saveSettings(data) {

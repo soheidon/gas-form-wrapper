@@ -222,6 +222,7 @@
       for (var i = 0; i < state.formDef.items.length; i++) {
         var item = state.formDef.items[i];
         if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        if (item.wrapperSkipRender) continue;
         if (state.itemSection[item.id] !== sectionNum) continue;
         var msg = validateItemInSection(item, sec);
         if (msg) {
@@ -740,6 +741,10 @@
           continue;
         }
 
+        if (item.wrapperSkipRender) {
+          continue;
+        }
+
         sectionsData[sectionIndex].parts.push(renderQuestion(item));
       }
 
@@ -796,6 +801,7 @@
       for (var i = 0; i < formDef.items.length; i++) {
         var item = formDef.items[i];
         if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        if (item.wrapperSkipRender) continue;
         var answer = state.answers[item.id];
         if (answer === undefined || answer === null) answer = state.answers[String(item.id)];
         if (answer === undefined || answer === null) continue;
@@ -869,6 +875,7 @@
     function wireInputs(formDef) {
       for (var i = 0; i < formDef.items.length; i++) {
         var item = formDef.items[i];
+        if (item.wrapperSkipRender) continue;
         if (item.type === 'TEXT' || item.type === 'PARAGRAPH_TEXT') {
           var node = document.getElementById('input_' + item.id);
           if (node) {
@@ -905,6 +912,7 @@
       for (var i = 0; i < formDef.items.length; i++) {
         var item = formDef.items[i];
         if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        if (item.wrapperSkipRender) continue;
 
         switch (item.type) {
           case 'TEXT':
@@ -967,6 +975,7 @@
       for (var i = 0; i < formDef.items.length; i++) {
         var item = formDef.items[i];
         if (item.type === 'PAGE_BREAK' || item.type === 'SECTION_HEADER') continue;
+        if (item.wrapperSkipRender) continue;
         var v = raw[item.id];
         if (v === undefined) v = raw[String(item.id)];
         out[item.id] = v;
@@ -986,8 +995,30 @@
       }
       var nextBtns = document.querySelectorAll('button.page-next');
       for (var j = 0; j < nextBtns.length; j++) {
-        if (nextBtns[j].textContent === '送信中...') nextBtns[j].textContent = '次へ';
+        var nt = nextBtns[j].textContent;
+        if (nt === '送信中...' || nt === '位置を確認中...') nextBtns[j].textContent = '次へ';
       }
+    }
+
+    function fetchGpsLatLngPromise_() {
+      return new Promise(function(resolve) {
+        if (!navigator.geolocation || !navigator.geolocation.getCurrentPosition) {
+          resolve({ latlng: '', status: 'unsupported' });
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          function(pos) {
+            resolve({
+              latlng: String(pos.coords.latitude) + ',' + String(pos.coords.longitude),
+              status: 'ok'
+            });
+          },
+          function() {
+            resolve({ latlng: '', status: 'denied_or_error' });
+          },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        );
+      });
     }
 
     function runSubmitFlow() {
@@ -1004,24 +1035,47 @@
       for (var nb = 0; nb < navBtns.length; nb++) navBtns[nb].disabled = true;
       var btn = document.getElementById('submit-button');
       var activeNext = document.querySelector('.form-section.active button.page-next');
+
+      function sendPayload(gpsResult) {
+        if (btn) {
+          btn.innerHTML = '<span class="spinner"></span>送信中...';
+        } else if (activeNext) {
+          activeNext.textContent = '送信中...';
+        }
+        var payload = {
+          answers: state.answers,
+          visitedSections: visitedSectionsArrayFromState(),
+          formRevisionHash: state.formDef.formRevisionHash,
+          webAppVersion: state.formDef.webAppVersion,
+          submissionId: state.submissionId
+        };
+        if (state.formDef.collectGps) {
+          payload.gps = { latlng: (gpsResult && gpsResult.latlng) ? gpsResult.latlng : '' };
+        }
+        google.script.run
+          .withSuccessHandler(onSubmitSuccess)
+          .withFailureHandler(onSubmitError)
+          .submitAnswer(payload);
+      }
+
+      if (state.formDef.collectGps) {
+        if (btn) {
+          btn.innerHTML = '<span class="spinner"></span>位置を確認中...';
+        } else if (activeNext) {
+          activeNext.textContent = '位置を確認中...';
+        }
+        fetchGpsLatLngPromise_().then(function(gpsResult) {
+          sendPayload(gpsResult);
+        });
+        return;
+      }
+
       if (btn) {
         btn.innerHTML = '<span class="spinner"></span>送信中...';
       } else if (activeNext) {
         activeNext.textContent = '送信中...';
       }
-
-      var payload = {
-        answers: state.answers,
-        visitedSections: visitedSectionsArrayFromState(),
-        formRevisionHash: state.formDef.formRevisionHash,
-        webAppVersion: state.formDef.webAppVersion,
-        submissionId: state.submissionId
-      };
-
-      google.script.run
-        .withSuccessHandler(onSubmitSuccess)
-        .withFailureHandler(onSubmitError)
-        .submitAnswer(payload);
+      sendPayload(null);
     }
 
     function onSubmitSuccess(result) {
